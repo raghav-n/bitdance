@@ -1,48 +1,50 @@
 project:
-  seed: 42
-  device: "auto"            # "cpu" | "cuda:0" | "mps"
-  data_dir: "data"
-  models_dir: "models"
-  runs_dir: "runs"
+    seed: 42
+    device: "auto" # "cpu" | "cuda:0" | "mps"
+    data_dir: "data"
+    models_dir: "models"
+    runs_dir: "runs"
 
 dataset:
-  slug: "base"              # logical dataset id for normalized data
+    slug: "restaurant_reviews"
 
 augment:
-  slug: "none"              # logical augmentation scheme id
+    slug: "none" # logical augmentation scheme id
 
 featurize:
-  family: "encoder"         # "encoder" | "tfidf" (defaults to train.family)
-  slug: "base"              # logical featurization scheme id
-  seed: 42                   # overrides project.seed for splits
+    family: "encoder" # "encoder" | "tfidf" (defaults to train.family)
+    slug: "base" # logical featurization scheme id
+    seed: 42 # overrides project.seed for splits
 
 ingest:
-  sources:
-    - name: "googlelocal"
-      path: "data/raw/googlelocal/*.parquet"
-    - name: "yelp"
-      path: "data/raw/yelp/*.jsonl"
+    sources:
+        - name: "restaurant_reviews"
+          path: "data/archive/reviews.csv"
+    image:
+        resize_dimensions: [224, 224]
+        format: "RGB"
+        base_path: "data/archive/dataset" # Add this
 
 annotate:
-  llm:
-    provider: "openai"      # or "local"
-    model: "gpt-4o-mini"
-    max_concurrency: 4
-    temperature: 0.0
-  rules:
-    url_regex: true
-    phone_regex: true
-    never_been_patterns:
-      en: ["never been", "haven't visited"]
-      zh: ["没去过", "从来没去"]
+    llm:
+        provider: "openai" # or "local"
+        model: "gpt-4o-mini"
+        max_concurrency: 4
+        temperature: 0.0
+    rules:
+        url_regex: true
+        phone_regex: true
+        never_been_patterns:
+            en: ["never been", "haven't visited"]
+            zh: ["没去过", "从来没去"]
 
 train:
-  family: "encoder"         # "baseline" | "encoder" | "sft"
-  model_name: "xlm-roberta-base"
-  batch_size: 16
-  lr: 3e-5
-  epochs: 3
-  multilabel: true
+    family: "encoder" # "baseline" | "encoder" | "sft"
+    model_name: "xlm-roberta-base"
+    batch_size: 16
+    lr: 3e-5
+    epochs: 3
+    multilabel: true
 
 evaluate:
-  threshold: 0.5
+    threshold: 0.5

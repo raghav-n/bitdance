@@ -3,3 +3,7 @@ AGENTS.md
 *.pyc
 runs/*
 .env
+.venv/
+__pycache__/
+*data/
+*.DS_Store
