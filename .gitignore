@@ -7,3 +7,21 @@ runs/*
 __pycache__/
 *data/
 *.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data Science & ML
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+models/
+!models/.gitkeep
+reports/
+!reports/.gitkeep
+
+# Logs
+*.log
+logs/
