@@ -27,16 +27,43 @@ ingest:
 
 annotate:
     llm:
-        provider: "openai" # or "local"
-        model: "gpt-4o-mini"
-        max_concurrency: 4
-        temperature: 0.0
+        provider: "local"  # "openai" | "huggingface" | "local"
+        model: "google/gemma-3-4b-it" #google/gemma-2b-it
+       # model: "microsoft/DialoGPT-small"
+        #model: "Qwen/Qwen2.5-0.5B-Instruct"  # "Qwen/Qwen2.5-3B-Instruct" 
+        task_type: "image-text-to-text"
+        hf_token: "HF_TOKEN_HERE"
+        #temperature: 0.0
+        do_sample: False
+        max_tokens: 512
+        timeout: 30
+        retry_attempts: 3
+        batch_size: 2  # Process reviews in batches
+        max_batches: 1  # Maximum number of batches to process
+        start_batch: 0  # Batch index to start from
+    prompts:
+        # Advanced prompt engineering with few-shot examples
+        advertisement:
+            system: "You are an expert content moderator specializing in detecting promotional content and advertisements in restaurant reviews."
+            few_shot_examples: true
+            confidence_threshold: 0.8
+        irrelevant:
+            system: "You are an expert content moderator specializing in detecting irrelevant content that doesn't relate to the restaurant experience."
+            few_shot_examples: true
+            confidence_threshold: 0.8
+        rant_without_visit:
+            system: "You are an expert content moderator specializing in detecting complaints from people who likely never visited the restaurant."
+            few_shot_examples: true
+            confidence_threshold: 0.8
     rules:
         url_regex: true
         phone_regex: true
         never_been_patterns:
-            en: ["never been", "haven't visited"]
-            zh: ["没去过", "从来没去"]
+            en: ["never been", "haven't visited", "didn't go", "haven't eaten", "never tried"]
+            zh: ["没去过", "从来没去", "没吃过", "没试过"]
+        promotional_keywords:
+            en: ["discount", "promo", "offer", "deal", "sale", "coupon", "free", "limited time"]
+            zh: ["折扣", "促销", "优惠", "免费", "限时"]
 
 train:
     family: "encoder" # "baseline" | "encoder" | "sft"

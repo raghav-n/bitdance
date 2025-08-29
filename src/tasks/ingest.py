@@ -18,7 +18,10 @@ from ..orchestrator.logging import get_logger
 
 @task(
     name="ingest_all",
-    inputs=["configs/base.yaml", lambda params: params['ingest']['sources'][0]['path']],
+    inputs=lambda params: [
+        "configs/base.yaml",
+        params['ingest']['sources'][0]['path']
+    ],
     outputs=[
         "data/raw/restaurant_reviews/reviews_text_only.parquet",
         "data/raw/restaurant_reviews/reviews_with_images.parquet", 
