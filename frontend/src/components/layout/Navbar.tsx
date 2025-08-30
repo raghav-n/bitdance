@@ -8,7 +8,6 @@ import {
   ChevronRight,
   BarChart3,
   Brain,
-  Zap,
   Shield,
 } from "lucide-react";
 import {
@@ -31,12 +30,11 @@ const Navbar = () => {
   const { collapsed, toggleCollapsed } = useNavbar();
   const location = useLocation();
 
-  // Only the 5 dashboard navigation items
+  // Updated navigation items (removed prediction)
   const navItems = [
     { icon: Home, label: "Overview Dashboard", path: "/" },
     { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: Brain, label: "Classification", path: "/classification" },
-    { icon: Zap, label: "Prediction", path: "/prediction" },
     { icon: Shield, label: "Violations", path: "/violations" },
   ];
 
