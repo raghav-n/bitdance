@@ -1,0 +1,62 @@
+{
+  "model": "encoder/enc-xlm-roberta-base",
+  "family": "encoder",
+  "labels": [
+    "irrelevant_content",
+    "advertisement",
+    "review_without_visit"
+  ],
+  "threshold": 0.5,
+  "n_samples": 211,
+  "per_label": {
+    "irrelevant_content": {
+      "precision": 0.9,
+      "recall": 0.8181818181818182,
+      "f1": 0.8571428571428571,
+      "ap": 0.912531479832856,
+      "support": 22,
+      "confusion": {
+        "tn": 187,
+        "fp": 2,
+        "fn": 4,
+        "tp": 18
+      }
+    },
+    "advertisement": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "ap": 1.0,
+      "support": 17,
+      "confusion": {
+        "tn": 194,
+        "fp": 0,
+        "fn": 0,
+        "tp": 17
+      }
+    },
+    "review_without_visit": {
+      "precision": 1.0,
+      "recall": 0.8,
+      "f1": 0.8888888888888888,
+      "ap": 0.8423881408948728,
+      "support": 15,
+      "confusion": {
+        "tn": 196,
+        "fp": 0,
+        "fn": 3,
+        "tp": 12
+      }
+    }
+  },
+  "macro": {
+    "precision": 0.9666666666666667,
+    "recall": 0.8727272727272727,
+    "f1": 0.9153439153439153
+  },
+  "micro": {
+    "precision": 0.9591836734693877,
+    "recall": 0.8703703703703703,
+    "f1": 0.912621359223301
+  }
+}

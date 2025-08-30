@@ -2,10 +2,61 @@ const API_BASE_URL = 'http://localhost:5001/api';
 
 // Type definitions
 interface OverviewMetrics {
-  totalReviews: number;
-  relevantReviews: number;
-  violations: number;
-  modelAccuracy: number;
+  totalReviews: string;
+  relevantReviews: string;
+  violations: string;
+  bestModel: {
+    name: string;
+    family: string;
+    f1_score: string;
+  };
+  modelComparison: {
+    total_models: number;
+    avg_f1: string;
+    best_f1: string;
+    worst_f1: string;
+    encoder_count: number;
+    sft_count: number;
+  };
+}
+
+interface ModelSummary {
+  id: string;
+  name: string;
+  family: string;
+  f1_score: number;
+  precision: number;
+  recall: number;
+}
+
+interface ModelDetails {
+  model: string;
+  name: string;
+  family: string;
+  n_samples: number;
+  threshold: number;
+  overall_metrics: {
+    precision: number;
+    recall: number;
+    f1_score: number;
+    macro_precision: number;
+    macro_recall: number;
+    macro_f1: number;
+  };
+  per_category: Array<{
+    category: string;
+    precision: number;
+    recall: number;
+    f1_score: number;
+    support: number;
+    ap: number;
+    confusion_matrix: {
+      tn: number;
+      fp: number;
+      fn: number;
+      tp: number;
+    };
+  }>;
 }
 
 interface ClassificationData {
@@ -92,9 +143,18 @@ class ApiService {
   async getViolationExamples(category: string): Promise<any> {
     return this.request(`/violations/examples?category=${encodeURIComponent(category)}`);
   }
+
+  // Models API
+  async getModelList(): Promise<ModelSummary[]> {
+    return this.request<ModelSummary[]>('/models/list');
+  }
+
+  async getModelDetails(modelId: string): Promise<ModelDetails> {
+    return this.request<ModelDetails>(`/models/${encodeURIComponent(modelId)}/details`);
+  }
 }
 
 export const apiService = new ApiService();
-export type { OverviewMetrics, ClassificationData, TimeSeriesData, RecentActivity };
+export type { OverviewMetrics, ClassificationData, TimeSeriesData, RecentActivity, ModelSummary, ModelDetails };
 
 

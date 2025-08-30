@@ -18,9 +18,7 @@ def _get(d: Dict, *keys, default=None):
 
 def slugify(s: str) -> str:
     return (
-        (s or "").strip().lower().replace(" ", "_")
-        .replace("/", "-")
-        .replace("\\", "-")
+        (s or "").strip().lower().replace(" ", "_").replace("/", "-").replace("\\", "-")
     )
 
 
@@ -33,7 +31,9 @@ def models_dir(p: Dict) -> str:
 
 
 def seed(p: Dict) -> int:
-    return int(_get(p, "featurize", "seed", default=_get(p, "project", "seed", default=42)))
+    return int(
+        _get(p, "featurize", "seed", default=_get(p, "project", "seed", default=42))
+    )
 
 
 def dataset_slug(p: Dict) -> str:
@@ -52,13 +52,9 @@ def model_name_slug(p: Dict) -> str:
     return slugify(_get(p, "train", "model_name", default="xlm-roberta-base"))
 
 
-def featurizer_slug(p: Dict) -> str:
-    fam = slugify(_get(p, "featurize", "family", default=_get(p, "train", "family", default="encoder")))
-    if fam == "encoder":
-        return f"hf-{model_name_slug(p)}"
-    return slugify(_get(p, "featurize", "name", default="tfidf"))
-
-
 def train_run_name(p: Dict) -> str:
-    return slugify(_get(p, "train", "run_name", default=_get(p, "runtime", "run_id", default="run")))
-
+    return slugify(
+        _get(
+            p, "train", "run_name", default=_get(p, "runtime", "run_id", default="run")
+        )
+    )

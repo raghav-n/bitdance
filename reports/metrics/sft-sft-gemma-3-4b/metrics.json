@@ -1,0 +1,62 @@
+{
+  "model": "sft/sft-gemma-3-4b",
+  "family": "sft",
+  "labels": [
+    "irrelevant_content",
+    "advertisement",
+    "review_without_visit"
+  ],
+  "threshold": 0.5,
+  "n_samples": 211,
+  "per_label": {
+    "irrelevant_content": {
+      "precision": 0.7727272727272727,
+      "recall": 0.7727272727272727,
+      "f1": 0.7727272727272727,
+      "ap": 0.6208041204809839,
+      "support": 22,
+      "confusion": {
+        "tn": 184,
+        "fp": 5,
+        "fn": 5,
+        "tp": 17
+      }
+    },
+    "advertisement": {
+      "precision": 0.9333333333333333,
+      "recall": 0.8235294117647058,
+      "f1": 0.875,
+      "ap": 0.7828454604590651,
+      "support": 17,
+      "confusion": {
+        "tn": 193,
+        "fp": 1,
+        "fn": 3,
+        "tp": 14
+      }
+    },
+    "review_without_visit": {
+      "precision": 0.6190476190476191,
+      "recall": 0.8666666666666667,
+      "f1": 0.7222222222222222,
+      "ap": 0.5459866094937185,
+      "support": 15,
+      "confusion": {
+        "tn": 188,
+        "fp": 8,
+        "fn": 2,
+        "tp": 13
+      }
+    }
+  },
+  "macro": {
+    "precision": 0.7750360750360751,
+    "recall": 0.8209744503862151,
+    "f1": 0.7899831649831649
+  },
+  "micro": {
+    "precision": 0.7586206896551724,
+    "recall": 0.8148148148148148,
+    "f1": 0.7857142857142857
+  }
+}

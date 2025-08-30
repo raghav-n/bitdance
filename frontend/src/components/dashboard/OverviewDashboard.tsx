@@ -6,6 +6,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   BarChart,
   Bar,
   XAxis,
@@ -21,7 +28,7 @@ import {
   Line
 } from "recharts";
 import { useState, useEffect } from "react";
-import { apiService, type OverviewMetrics, type ClassificationData, type TimeSeriesData, type RecentActivity } from "@/services/api";
+import { apiService, type OverviewMetrics, type ClassificationData, type TimeSeriesData, type RecentActivity, type ModelSummary, type ModelDetails } from "@/services/api";
 
 const OverviewDashboard = () => {
   // State for data with proper types
@@ -31,6 +38,12 @@ const OverviewDashboard = () => {
   const [classificationData, setClassificationData] = useState<ClassificationData[]>([]);
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesData[]>([]);
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
+  
+  // Model comparison state
+  const [models, setModels] = useState<ModelSummary[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
+  const [modelDetails, setModelDetails] = useState<ModelDetails | null>(null);
+  const [modelLoading, setModelLoading] = useState(false);
 
   // Chart colors matching your theme
   const chartColors = ['#B3D9FF', '#80C1FF', '#4DA6FF', '#99E6FF'];
@@ -39,17 +52,24 @@ const OverviewDashboard = () => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [metrics, classification, timeSeries, activity] = await Promise.all([
+        const [metrics, classification, timeSeries, activity, modelList] = await Promise.all([
           apiService.getOverviewMetrics(),
           apiService.getClassificationData(),
           apiService.getTimeSeriesData(),
-          apiService.getRecentActivity()
+          apiService.getRecentActivity(),
+          apiService.getModelList()
         ]);
 
         setKeyMetrics(metrics);
         setClassificationData(classification);
         setTimeSeriesData(timeSeries);
         setRecentActivity(activity);
+        setModels(modelList);
+        
+        // Set the best model as default selection
+        if (modelList.length > 0) {
+          setSelectedModel(modelList[0].id);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch data');
       } finally {
@@ -59,6 +79,25 @@ const OverviewDashboard = () => {
 
     fetchData();
   }, []);
+
+  // Load model details when selection changes
+  useEffect(() => {
+    const fetchModelDetails = async () => {
+      if (!selectedModel) return;
+      
+      try {
+        setModelLoading(true);
+        const details = await apiService.getModelDetails(selectedModel);
+        setModelDetails(details);
+      } catch (err) {
+        console.error('Failed to fetch model details:', err);
+      } finally {
+        setModelLoading(false);
+      }
+    };
+
+    fetchModelDetails();
+  }, [selectedModel]);
 
   if (loading) return <div className="flex items-center justify-center h-64">Loading...</div>;
   if (error) return <div className="flex items-center justify-center h-64 text-red-600">Error: {error}</div>;
@@ -103,8 +142,132 @@ const OverviewDashboard = () => {
         <Card>
           <CardContent className="p-6">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{keyMetrics?.modelAccuracy}</div>
-              <div className="text-sm text-gray-600 mt-1">Model Accuracy</div>
+              <div className="text-2xl font-bold text-blue-600">{keyMetrics?.bestModel.f1_score}</div>
+              <div className="text-sm text-gray-600 mt-1">Best Model F1</div>
+              <div className="text-xs text-gray-500 mt-1">{keyMetrics?.bestModel.name}</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Model Comparison Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Model Performance Comparison</CardTitle>
+              <CardDescription>
+                Compare performance across all {keyMetrics?.modelComparison.total_models} models: {keyMetrics?.modelComparison.encoder_count} BERT variants + {keyMetrics?.modelComparison.sft_count} SFT models
+              </CardDescription>
+            </div>
+            <div className="w-64">
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a model..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium">{model.name}</span>
+                        <div className="flex items-center space-x-2 ml-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            model.family === 'encoder' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                          }`}>
+                            {model.family === 'encoder' ? 'BERT' : 'SFT'}
+                          </span>
+                          <span className="text-sm font-mono">F1: {(model.f1_score * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {modelLoading ? (
+            <div className="flex items-center justify-center h-32">Loading model details...</div>
+          ) : modelDetails ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Overall Metrics */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-900">Overall Performance</h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">F1 Score:</span>
+                    <span className="text-sm font-medium">{(modelDetails.overall_metrics.f1_score * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Precision:</span>
+                    <span className="text-sm font-medium">{(modelDetails.overall_metrics.precision * 100).toFixed(1)}%</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Recall:</span>
+                    <span className="text-sm font-medium">{(modelDetails.overall_metrics.recall * 100).toFixed(1)}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Per-Category Performance */}
+              {modelDetails.per_category.map((category, index) => (
+                <div key={category.category} className="space-y-4">
+                  <h4 className="font-semibold text-gray-900">{category.category}</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">F1:</span>
+                      <span className="text-sm font-medium">{(category.f1_score * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Precision:</span>
+                      <span className="text-sm font-medium">{(category.precision * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Recall:</span>
+                      <span className="text-sm font-medium">{(category.recall * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-600">Support:</span>
+                      <span className="text-sm font-medium">{category.support}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32 text-gray-500">
+              Select a model to view detailed performance metrics
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Model Comparison Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-xl font-bold text-green-600">{keyMetrics?.modelComparison.best_f1}</div>
+              <div className="text-sm text-gray-600 mt-1">Best Performance</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-xl font-bold text-blue-600">{keyMetrics?.modelComparison.avg_f1}</div>
+              <div className="text-sm text-gray-600 mt-1">Average F1</div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="text-center">
+              <div className="text-xl font-bold text-orange-600">{keyMetrics?.modelComparison.worst_f1}</div>
+              <div className="text-sm text-gray-600 mt-1">Lowest Performance</div>
             </div>
           </CardContent>
         </Card>

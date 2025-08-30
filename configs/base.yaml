@@ -10,11 +10,16 @@ dataset:
 
 augment:
     slug: "none" # logical augmentation scheme id
-
-featurize:
-    family: "encoder" # "encoder" | "tfidf" (defaults to train.family)
-    slug: "base" # logical featurization scheme id
-    seed: 42 # overrides project.seed for splits
+    classes:
+        NoAdvertisement: 100
+        NoIrrelevantContent: 100
+        NoRantWithoutVisit: 100
+    languages: ["en"]
+    llm:
+        gemini_model: "gemini-2.5-flash-lite"
+        temperature: 1.2
+        rate_limit: 0.2
+    verify_conf_threshold: 0.8
 
 ingest:
     sources:
@@ -27,51 +32,94 @@ ingest:
 
 annotate:
     llm:
-        provider: "local"  # "openai" | "huggingface" | "local"
-        model: "google/gemma-3-4b-it" #google/gemma-2b-it
-       # model: "microsoft/DialoGPT-small"
-        #model: "Qwen/Qwen2.5-0.5B-Instruct"  # "Qwen/Qwen2.5-3B-Instruct" 
-        task_type: "image-text-to-text"
-        hf_token: "HF_TOKEN_HERE"
-        #temperature: 0.0
-        do_sample: False
-        max_tokens: 512
-        timeout: 30
-        retry_attempts: 3
-        batch_size: 2  # Process reviews in batches
-        max_batches: 1  # Maximum number of batches to process
-        start_batch: 0  # Batch index to start from
-    prompts:
-        # Advanced prompt engineering with few-shot examples
-        advertisement:
-            system: "You are an expert content moderator specializing in detecting promotional content and advertisements in restaurant reviews."
-            few_shot_examples: true
-            confidence_threshold: 0.8
-        irrelevant:
-            system: "You are an expert content moderator specializing in detecting irrelevant content that doesn't relate to the restaurant experience."
-            few_shot_examples: true
-            confidence_threshold: 0.8
-        rant_without_visit:
-            system: "You are an expert content moderator specializing in detecting complaints from people who likely never visited the restaurant."
-            few_shot_examples: true
-            confidence_threshold: 0.8
-    rules:
-        url_regex: true
-        phone_regex: true
-        never_been_patterns:
-            en: ["never been", "haven't visited", "didn't go", "haven't eaten", "never tried"]
-            zh: ["没去过", "从来没去", "没吃过", "没试过"]
-        promotional_keywords:
-            en: ["discount", "promo", "offer", "deal", "sale", "coupon", "free", "limited time"]
-            zh: ["折扣", "促销", "优惠", "免费", "限时"]
+        rate_limit: 0.2
+        final_conf_threshold: 0.8
+        startAt: 0
 
 train:
-    family: "encoder" # "baseline" | "encoder" | "sft"
-    model_name: "xlm-roberta-base"
-    batch_size: 16
-    lr: 3e-5
-    epochs: 3
+    # family: "encoder" # "baseline" | "encoder" | "sft"
+    # model_name: "xlm-roberta-base"
+    # batch_size: 16
+    # lr: 3e-5
+    # epochs: 10
     multilabel: true
+    train_jsonl: "data/processed/restaurant_reviews/train.jsonl"
+    val_jsonl: "data/processed/restaurant_reviews/val.jsonl"
+    use_modal: true
+    modal_volume_name: "bitdance-models"  # All models share this Modal Volume
+    modal_gpu: "A10"  # e.g., "T4", "L40S", "H100", "A100-80GB", or "H100:2"
+    modal_download_artifacts: false  # if true, download remote artifacts after training
+    modal_pull_only: false  # if true, skip training and only pull from Modal volume
+    modal_timeout_seconds: 86400  # extend Modal function timeout for long trainings
+    oversample: true
+    # Optional: override remote relative subdir in Modal Volume to pull from
+    # Example: models/encoder/20250830-113945
+    # modal_pull_rel_subdir: "models/encoder/20250830-113945"
+
+    # Optional: train multiple models in one run.
+    # When provided, each item can override knobs; unspecified fields inherit from above.
+    # If use_modal is true, each model runs in a separate container with the same Modal volume.
+    models:
+    #   - family: "encoder" # "baseline" | "encoder" | "sft"
+    #     model_name: "xlm-roberta-base"
+    #     batch_size: 16
+    #     lr: 3e-5
+    #     epochs: 10
+    #     run_name: "enc-xlm-roberta-base"
+
+    #   - family: "encoder" # "baseline" | "encoder" | "sft"
+    #     model_name: "bert-large-cased"
+    #     batch_size: 16
+    #     lr: 3e-5
+    #     epochs: 10
+    #     run_name: "enc-bert-large-cased"
+
+    #   - family: "sft"
+    #     model_name: "Qwen/Qwen3-8B"
+    #     lr: 5e-5
+    #     epochs: 3
+    #     run_name: "sft-qwen-3-8b"
+
+    #   - family: "sft"
+    #     model_name: "mistralai/Ministral-8B-Instruct-2410"
+    #     lr: 5e-5
+    #     epochs: 3
+    #     run_name: "sft-ministral-8b"
+
+    #   - family: "sft"
+    #     model_name: "google/gemma-3-12b-it"
+    #     lr: 5e-5
+    #     epochs: 3
+    #     run_name: "sft-gemma-3-12b"
+
+      - family: "fraud_scan"
+        min_reviews: 5
+        topk: 5
+        overall_threshold: 0.6
+        sim_threshold: 0.80
+        high_sim_threshold: 0.90
+        min_cluster_size: 2
+        dup_threshold: 0.90
 
 evaluate:
     threshold: 0.5
+    use_modal: true
+    modal_gpu: "A10"
+    # modal_volume_name: "bitdance-models" # defaults to train.modal_volume_name
+    modal_timeout_seconds: 7200
+    # Batch generation during evaluation (per family defaults: sft=8, rnn=128, encoder=32)
+    # batch_size: 8
+    # sft_batch_size: 8
+    # rnn_batch_size: 128
+    # encoder_batch_size: 32
+    # Log progress every N samples
+    # log_every: 20
+    # Evaluate multiple models stored remotely in the Modal volume.
+    # Paths are relative to `models_dir` and match training outputs.
+    models:
+    #   - "sft/sft-qwen"
+    #   - "sft/sft-mistral"
+    #   - "sft/sft-gemma-3-4b"
+    #   - "encoder/enc-xlm-roberta-base"
+    #   - "encoder/enc-bert-large-cased"
+      - "sft/sft-gemma-3-12b"

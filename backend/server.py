@@ -20,12 +20,21 @@ CORS(app, resources={
 
 # Load real metrics data
 def load_metrics_data():
-    """Load the real metrics from JSON files"""
+    """Load the real metrics from all 5 model directories"""
     metrics = []
-    data_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data')
+    reports_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'reports', 'metrics')
     
-    for i in range(1, 4):
-        file_path = os.path.join(data_dir, f'metrics_{i}.json')
+    # List of all 5 model directories
+    model_dirs = [
+        'encoder-enc-bert-large-cased',
+        'encoder-enc-xlm-roberta-base', 
+        'sft-sft-gemma-3-12b',
+        'sft-sft-gemma-3-4b',
+        'sft-sft-ministral-8b'
+    ]
+    
+    for model_dir in model_dirs:
+        file_path = os.path.join(reports_dir, model_dir, 'metrics.json')
         try:
             with open(file_path, 'r') as f:
                 metrics.append(json.load(f))
@@ -55,20 +64,20 @@ def get_model_comparison_data():
     return comparison
 
 def get_aggregated_classification_data():
-    """Generate classification data aggregated from ALL 3 metrics files"""
+    """Generate classification data aggregated from ALL 5 metrics files"""
     if not REAL_METRICS:
         raise Exception("No real metrics data loaded!")
     
-    # Aggregate data from ALL models
-    total_samples = sum(m['n_samples'] for m in REAL_METRICS)
+    # Use average data across all models (same test set)
+    avg_samples = REAL_METRICS[0]['n_samples']  # All models use same test set
     aggregated_labels = {}
     
-    # Sum up support across all models for each label
+    # Average support across all models for each label
     for metric in REAL_METRICS:
         for label, data in metric['per_label'].items():
             if label not in aggregated_labels:
-                aggregated_labels[label] = 0
-            aggregated_labels[label] += data['support']
+                aggregated_labels[label] = []
+            aggregated_labels[label].append(data['support'])
     
     classification_data = []
     
@@ -79,17 +88,20 @@ def get_aggregated_classification_data():
         'review_without_visit': 'Rant without Visit'
     }
     
-    for label, count in aggregated_labels.items():
+    total_violations = 0
+    for label, supports in aggregated_labels.items():
+        # Use the actual support (should be same across models since same test set)
+        avg_count = int(sum(supports) / len(supports))
+        total_violations += avg_count
+        
         category = category_map.get(label, label.replace('_', ' ').title())
         classification_data.append({
             'category': category,
-            'count': count
+            'count': avg_count
         })
     
-    # Add relevant reviews (average total - sum of violations)
-    avg_total = total_samples // len(REAL_METRICS)
-    violation_count = sum(item['count'] for item in classification_data)
-    relevant_count = avg_total - (violation_count // len(REAL_METRICS))
+    # Add relevant reviews
+    relevant_count = avg_samples - total_violations
     classification_data.insert(0, {'category': 'Relevant', 'count': relevant_count})
     
     return classification_data
@@ -136,35 +148,44 @@ def generate_real_time_series_data(metric_type="Review Volume", time_range="Last
 # API Routes
 @app.route('/api/overview/metrics')
 def get_overview_metrics():
-    """Get overview metrics using ALL 3 real metrics files"""
+    """Get overview metrics showing best model and model comparison"""
     if not REAL_METRICS:
         raise Exception("No real metrics data loaded!")
     
-    # Use aggregated data from all 3 models
-    total_samples_all_models = sum(m['n_samples'] for m in REAL_METRICS)
-    avg_samples_per_model = total_samples_all_models // len(REAL_METRICS)
+    # All models tested on same dataset
+    total_samples = REAL_METRICS[0]['n_samples']
     
-    # Calculate violations across all models
-    total_violations = 0
-    for metric in REAL_METRICS:
-        violations_this_model = sum(
-            metric['per_label'][label]['support']
-            for label in metric['per_label'].keys()
-        )
-        total_violations += violations_this_model
+    # Get best and worst models
+    best_model = max(REAL_METRICS, key=lambda x: x['micro']['f1'])
+    worst_model = min(REAL_METRICS, key=lambda x: x['micro']['f1'])
     
-    avg_violations = total_violations // len(REAL_METRICS)
-    relevant_reviews = avg_samples_per_model - avg_violations
+    # Calculate violations from best model
+    violations = sum(
+        best_model['per_label'][label]['support']
+        for label in best_model['per_label'].keys()
+    )
+    relevant_reviews = total_samples - violations
     
-    # Calculate average F1 across all models
+    # Calculate average F1 across all 5 models
     avg_f1 = sum(m['micro']['f1'] for m in REAL_METRICS) / len(REAL_METRICS)
-    accuracy = f"{avg_f1 * 100:.1f}%"
     
     return jsonify({
-        'totalReviews': f"{avg_samples_per_model:,}",
+        'totalReviews': f"{total_samples:,}",
         'relevantReviews': f"{relevant_reviews:,}",
-        'violations': f"{avg_violations}",
-        'modelAccuracy': accuracy
+        'violations': f"{violations}",
+        'bestModel': {
+            'name': best_model['model'].split('/')[-1],
+            'family': best_model['family'],
+            'f1_score': f"{best_model['micro']['f1'] * 100:.1f}%"
+        },
+        'modelComparison': {
+            'total_models': len(REAL_METRICS),
+            'avg_f1': f"{avg_f1 * 100:.1f}%",
+            'best_f1': f"{best_model['micro']['f1'] * 100:.1f}%",
+            'worst_f1': f"{worst_model['micro']['f1'] * 100:.1f}%",
+            'encoder_count': len([m for m in REAL_METRICS if m['family'] == 'encoder']),
+            'sft_count': len([m for m in REAL_METRICS if m['family'] == 'sft'])
+        }
     })
 
 @app.route('/api/overview/classification-data')
@@ -177,20 +198,24 @@ def get_time_series():
 
 @app.route('/api/overview/recent-activity')
 def get_recent_activity():
-    """Recent activity using ALL 3 real metrics"""
+    """Recent activity using ALL 5 real metrics"""
     if not REAL_METRICS:
         raise Exception("No real metrics data loaded!")
     
     best_model = max(REAL_METRICS, key=lambda x: x['micro']['f1'])
+    worst_model = min(REAL_METRICS, key=lambda x: x['micro']['f1'])
     avg_f1 = sum(m['micro']['f1'] for m in REAL_METRICS) / len(REAL_METRICS)
-    total_samples = sum(m['n_samples'] for m in REAL_METRICS)
+    
+    # Count encoder vs SFT models
+    encoder_models = [m for m in REAL_METRICS if m['family'] == 'encoder']
+    sft_models = [m for m in REAL_METRICS if m['family'] == 'sft']
     
     return jsonify([
-        {'time': '2 minutes ago', 'action': 'Model evaluation completed', 'details': f'Best: {best_model["model"].split("/")[-1]} (F1: {best_model["micro"]["f1"]:.3f})'},
-        {'time': '5 minutes ago', 'action': 'All models analyzed', 'details': f'Average F1: {avg_f1:.3f} across {len(REAL_METRICS)} models'},
-        {'time': '12 minutes ago', 'action': 'Model comparison completed', 'details': f'BERT: {REAL_METRICS[0]["micro"]["f1"]:.3f}, XLM-R: {REAL_METRICS[1]["micro"]["f1"]:.3f}, Gemma: {REAL_METRICS[2]["micro"]["f1"]:.3f}'},
-        {'time': '18 minutes ago', 'action': 'Data processed', 'details': f'{total_samples} total samples across all models'},
-        {'time': '25 minutes ago', 'action': 'Pipeline completed', 'details': 'Real metrics integration finished'}
+        { 'action': 'Model comparison completed', 'details': f'Best: {best_model["model"].split("/")[-1]} (F1: {best_model["micro"]["f1"]:.3f})'},
+        { 'action': 'All 5 models evaluated', 'details': f'Avg F1: {avg_f1:.3f} | Range: {worst_model["micro"]["f1"]:.3f} - {best_model["micro"]["f1"]:.3f}'},
+        { 'action': 'SFT models analyzed', 'details': f'{len(sft_models)} LLM models: Gemma-12B, Gemma-4B, Ministral-8B'},
+        { 'action': 'Encoder models analyzed', 'details': f'{len(encoder_models)} BERT variants: BERT-Large, XLM-RoBERTa'},
+        {'action': 'Pipeline completed', 'details': f'Evaluated {len(REAL_METRICS)} models on {REAL_METRICS[0]["n_samples"]} samples'}
     ])
 
 @app.route('/api/analytics/time-series')
@@ -201,11 +226,88 @@ def get_analytics_time_series():
 
 @app.route('/api/classification/performance')
 def get_performance_metrics():
-    """Get real performance metrics from ALL 3 loaded models"""
+    """Get real performance metrics from ALL 5 loaded models"""
     if not REAL_METRICS:
         raise Exception("No real metrics data loaded!")
     
     return jsonify(get_model_comparison_data())
+
+@app.route('/api/models/list')
+def get_model_list():
+    """Get list of all available models"""
+    if not REAL_METRICS:
+        raise Exception("No real metrics data loaded!")
+    
+    models = []
+    for metric in REAL_METRICS:
+        model_name = metric['model'].split('/')[-1]
+        models.append({
+            'id': metric['model'],
+            'name': model_name,
+            'family': metric['family'],
+            'f1_score': metric['micro']['f1'],
+            'precision': metric['micro']['precision'],
+            'recall': metric['micro']['recall']
+        })
+    
+    # Sort by F1 score descending
+    models.sort(key=lambda x: x['f1_score'], reverse=True)
+    return jsonify(models)
+
+@app.route('/api/models/<path:model_id>/details')
+def get_model_details(model_id):
+    """Get detailed metrics for a specific model"""
+    if not REAL_METRICS:
+        raise Exception("No real metrics data loaded!")
+    
+    # Find the specific model
+    selected_model = None
+    for metric in REAL_METRICS:
+        if metric['model'] == model_id:
+            selected_model = metric
+            break
+    
+    if not selected_model:
+        return jsonify({'error': 'Model not found'}), 404
+    
+    # Format the response
+    details = {
+        'model': selected_model['model'],
+        'name': selected_model['model'].split('/')[-1],
+        'family': selected_model['family'],
+        'n_samples': selected_model['n_samples'],
+        'threshold': selected_model['threshold'],
+        'overall_metrics': {
+            'precision': selected_model['micro']['precision'],
+            'recall': selected_model['micro']['recall'],
+            'f1_score': selected_model['micro']['f1'],
+            'macro_precision': selected_model['macro']['precision'],
+            'macro_recall': selected_model['macro']['recall'],
+            'macro_f1': selected_model['macro']['f1']
+        },
+        'per_category': []
+    }
+    
+    # Add per-category metrics
+    category_map = {
+        'irrelevant_content': 'Irrelevant Content',
+        'advertisement': 'Advertisement',
+        'review_without_visit': 'Review without Visit'
+    }
+    
+    for label, metrics in selected_model['per_label'].items():
+        category_name = category_map.get(label, label.replace('_', ' ').title())
+        details['per_category'].append({
+            'category': category_name,
+            'precision': metrics['precision'],
+            'recall': metrics['recall'],
+            'f1_score': metrics['f1'],
+            'support': metrics['support'],
+            'ap': metrics['ap'],
+            'confusion_matrix': metrics['confusion']
+        })
+    
+    return jsonify(details)
 
 @app.route('/api/classification/confidence-data')
 def get_confidence_data():
@@ -382,6 +484,29 @@ if __name__ == '__main__':
     print("🚀 BitDance Backend Server Starting...")
     print(f"📊 Loaded {len(REAL_METRICS)} real metrics files")
     if REAL_METRICS:
-        for i, metric in enumerate(REAL_METRICS):
-            print(f"   Model {i+1}: {metric['model']} (F1: {metric['micro']['f1']:.3f})")
+        print("\n📈 Model Performance Summary:")
+        encoder_models = []
+        sft_models = []
+        
+        for metric in REAL_METRICS:
+            model_info = f"{metric['model'].split('/')[-1]} (F1: {metric['micro']['f1']:.3f})"
+            if metric['family'] == 'encoder':
+                encoder_models.append(model_info)
+            else:
+                sft_models.append(model_info)
+        
+        print("   🤖 Encoder Models (BERT variants):")
+        for model in encoder_models:
+            print(f"      • {model}")
+        
+        print("   🧠 SFT Models (LLM + Supervised Fine-tuning):")
+        for model in sft_models:
+            print(f"      • {model}")
+        
+        best_model = max(REAL_METRICS, key=lambda x: x['micro']['f1'])
+        avg_f1 = sum(m['micro']['f1'] for m in REAL_METRICS) / len(REAL_METRICS)
+        print(f"\n🏆 Best Model: {best_model['model'].split('/')[-1]} (F1: {best_model['micro']['f1']:.3f})")
+        print(f"📊 Average F1: {avg_f1:.3f}")
+        print(f"📝 Test Set: {REAL_METRICS[0]['n_samples']} samples\n")
+    
     app.run(debug=True, host='0.0.0.0', port=5001)
