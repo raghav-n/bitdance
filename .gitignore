@@ -43,6 +43,7 @@ frontend/build/
 frontend/.vite/
 frontend/.next/
 frontend/out/
+frontend/node_modules/
 
 # Package manager lock files (keep package-lock.json but ignore yarn.lock)
 yarn.lock

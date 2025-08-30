@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request
-from flask_cors import CORS
+from flask_cors import CORS, cross_origin
 import pandas as pd
 import numpy as np
 import json
@@ -16,8 +16,9 @@ app = Flask(__name__)
 CORS(app, resources={
     r"/api/*": {
         "origins": ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
-        "methods": ["GET", "POST", "PUT", "DELETE"],
-        "allow_headers": ["Content-Type", "Authorization"]
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "max_age": 86400
     }
 })
 
@@ -589,7 +590,12 @@ def _predict_probs(model_dir: Path, fam: str, jsonl_path: Path, batch_size: int 
     raise ValueError(f"Unknown model family for inference: {fam}")
 
 
-@app.route('/api/inference/predict', methods=['POST'])
+@app.route('/api/inference/predict', methods=['POST', 'OPTIONS'])
+@cross_origin(
+    origins=["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+    methods=['POST', 'OPTIONS'],
+    allow_headers=['Content-Type', 'Authorization']
+)
 def inference_predict():
     """Run inference for one or more inputs using a local model directory.
 
