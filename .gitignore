@@ -19,8 +19,11 @@ __pycache__/
 *.hdf5
 models/
 !models/.gitkeep
-reports/
+!src/models/
 !reports/.gitkeep
+reports/metrics/*/metrics.json.hash
+reports/metrics/*/predictions.jsonl
+reports/metrics.zip
 
 # Logs
 *.log
