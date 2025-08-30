@@ -93,6 +93,33 @@ The codebase also provides a fusion utility that combines base supervised probab
 
 The evaluation procedure supports all of the model families mentioned above. It reads the test set produced by normalization, obtains probabilities from the appropriate prediction function, applies a default threshold of 0.5 to form binary predictions, and computes per‑label and aggregate metrics. It writes the metrics and the raw predictions to disk so that the results can be visualized or inspected later without re‑running inference.
 
+## Results Summary
+
+- Dataset: 211 test samples; 3 labels; decision threshold 0.5.
+- Top overall: `encoder/enc-bert-large-cased` — micro F1 0.920, macro F1 0.920.
+- Runner‑up: `encoder/enc-xlm-roberta-base` — micro F1 0.913, macro F1 0.915.
+- Best SFT: `sft/sft-gemma-3-12b` — micro F1 0.857, macro F1 0.865.
+- Others: `sft/sft-gemma-3-4b` — micro F1 0.786, macro F1 0.790; `sft/sft-ministral-8b` — micro F1 0.763, macro F1 0.785.
+
+Per‑label highlights
+
+- Advertisement: strongest label overall — F1 0.875–1.00; perfect 1.00 for both encoders and `gemma-3-12b`.
+- Irrelevant content: hardest label — F1 0.655–0.872; encoders lead on precision (1.00 for `enc-bert`), with recall around 0.77–0.82.
+- Review without visit: F1 0.722–0.889; `gemma-3-12b` has highest recall (0.933), encoders have highest precision (1.00) with recall ~0.80.
+
+Raw metrics (reports/metrics)
+
+- `reports/metrics/encoder-enc-bert-large-cased/metrics.json` — micro F1 0.920, macro F1 0.920; per‑label F1: [irrelevant 0.872, advertisement 1.000, review_without_visit 0.889].
+- `reports/metrics/encoder-enc-xlm-roberta-base/metrics.json` — micro F1 0.913, macro F1 0.915; per‑label F1: [irrelevant 0.857, advertisement 1.000, review_without_visit 0.889].
+- `reports/metrics/sft-sft-gemma-3-12b/metrics.json` — micro F1 0.857, macro F1 0.865; per‑label F1: [irrelevant 0.773, advertisement 1.000, review_without_visit 0.824].
+- `reports/metrics/sft-sft-gemma-3-4b/metrics.json` — micro F1 0.786, macro F1 0.790; per‑label F1: [irrelevant 0.773, advertisement 0.875, review_without_visit 0.722].
+- `reports/metrics/sft-sft-ministral-8b/metrics.json` — micro F1 0.763, macro F1 0.785; per‑label F1: [irrelevant 0.655, advertisement 0.944, review_without_visit 0.757].
+
+Notes
+
+- Encoder classifiers outperform SFT models on this task and dataset size; both encoder variants achieve perfect F1 on the advertisement label and the best overall micro/macro F1.
+- SFT models tend to trade higher recall for lower precision on some labels, leading to more false positives, especially for `irrelevant_content`.
+
 ## 3) Development Tools, APIs, and Libraries
 
 The project is developed primarily in Visual Studio Code with standard Python tooling, and ad‑hoc analysis and metric inspection are performed in Jupyter notebooks such as `eda_analysis.ipynb`. The orchestrator exposes a small Typer CLI, so you can run the full pipeline with a command such as `python -m src.orchestrator.cli full_run --config configs/base.yaml`, or you can run an individual step with `python -m src.orchestrator.cli run_task <name>`.
