@@ -4,6 +4,9 @@ import pandas as pd
 import numpy as np
 import json
 import os
+import sys
+import tempfile
+from pathlib import Path
 from datetime import datetime, timedelta
 import random
 
@@ -17,6 +20,20 @@ CORS(app, resources={
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+# Ensure project root and src/ are importable for model inference
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+SRC_DIR = os.path.join(BASE_DIR, 'src')
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
+
+# Lazy import labels (cheap) to expose consistent order in API
+try:
+    from models import LABELS  # type: ignore
+except Exception:
+    LABELS = ["irrelevant_content", "advertisement", "review_without_visit"]
 
 # Load real metrics data
 def load_metrics_data():
@@ -480,6 +497,165 @@ def get_violation_statistics():
 def health_check():
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
+
+# ---------------- Inference API ----------------
+
+def _infer_family_from_path(model_rel_or_abs: str) -> str:
+    p = model_rel_or_abs.replace('\\', '/').strip().lower()
+    if p.startswith('encoder/') or '/encoder/' in p:
+        return 'encoder'
+    if p.startswith('baseline/') or '/baseline/' in p:
+        return 'baseline'
+    if p.startswith('sft/') or p.startswith('sft-') or '/sft/' in p:
+        return 'sft'
+    if p.startswith('fraud_fuse/') or '/fraud_fuse/' in p or p.startswith('fraud/') or '/fraud/' in p:
+        return 'fraud_fuse'
+    # Fallback: take first segment as family
+    seg = p.strip('/').split('/')
+    return seg[0] if seg else 'encoder'
+
+
+def _resolve_model_dir(model_path: str) -> Path:
+    # Accept absolute path, repo-relative, or under models/
+    cand = Path(model_path)
+    if cand.exists():
+        return cand
+    # Try under repo root
+    cand = Path(BASE_DIR) / model_path
+    if cand.exists():
+        return cand
+    # Try beneath models/ directory
+    models_root = Path(BASE_DIR) / 'models'
+    cand = models_root / model_path
+    if cand.exists():
+        return cand
+    # If model_path already begins with models/, try that full path under BASE_DIR
+    if str(model_path).startswith('models/'):
+        cand = Path(BASE_DIR) / model_path
+        if cand.exists():
+            return cand
+    raise FileNotFoundError(f"Model directory not found: {model_path}")
+
+
+def _rows_from_inputs(payload: dict) -> list[dict]:
+    # Supports {text: str} or {inputs: [ {text, ...}, ... ]}
+    if 'inputs' in payload and isinstance(payload['inputs'], list):
+        rows = []
+        for r in payload['inputs']:
+            if isinstance(r, dict):
+                # Ensure at least 'text' exists
+                txt = str(r.get('text', ''))
+                rows.append({
+                    'business_name': r.get('business_name', ''),
+                    'author_name': r.get('author_name', ''),
+                    'rating': r.get('rating', ''),
+                    'has_photo': bool(r.get('has_photo', False)),
+                    'text': txt,
+                })
+        return rows
+    # Single-text path
+    txt = str(payload.get('text', '')).strip()
+    if not txt:
+        return []
+    return [{
+        'business_name': payload.get('business_name', ''),
+        'author_name': payload.get('author_name', ''),
+        'rating': payload.get('rating', ''),
+        'has_photo': bool(payload.get('has_photo', False)),
+        'text': txt,
+    }]
+
+
+def _predict_probs(model_dir: Path, fam: str, jsonl_path: Path, batch_size: int = 8) -> np.ndarray:
+    fam = fam.strip().lower()
+    if fam == 'encoder':
+        from models.bert_classifier import predict_probs_bert  # type: ignore
+        return predict_probs_bert(str(model_dir), str(jsonl_path), batch_size=batch_size)
+    if fam == 'baseline':
+        from models.rnn_classifier import load_rnn, predict_probs_rnn  # type: ignore
+        model = load_rnn(str(model_dir / 'model.pt'))
+        return predict_probs_rnn(model, str(jsonl_path), batch_size=batch_size)
+    if fam == 'sft':
+        from models.sft_lora import predict_probs_sft  # type: ignore
+        return predict_probs_sft(str(model_dir), str(jsonl_path), batch_size=batch_size)
+    if fam == 'fraud_fuse':
+        from models.fraud_fuse import predict_probs_fraud_fuse  # type: ignore
+        return predict_probs_fraud_fuse(
+            str(model_dir), str(jsonl_path), batch_size=batch_size, models_root=str(Path(BASE_DIR) / 'models')
+        )
+    raise ValueError(f"Unknown model family for inference: {fam}")
+
+
+@app.route('/api/inference/predict', methods=['POST'])
+def inference_predict():
+    """Run inference for one or more inputs using a local model directory.
+
+    Request JSON:
+    - model_path: str (absolute, repo-relative, or relative to models/)
+    - inputs: list of dicts with at least {'text': str} OR a single {'text': str}
+    - family: optional override (encoder|baseline|sft|fraud_fuse)
+    - threshold: optional float (default 0.5)
+    - batch_size: optional int
+    Response JSON includes labels, probs and binary preds per input.
+    """
+    try:
+        payload = request.get_json(force=True, silent=False) or {}
+    except Exception:
+        return jsonify({'error': 'Invalid JSON payload'}), 400
+
+    model_path = str(payload.get('model_path', '')).strip()
+    if not model_path:
+        return jsonify({'error': 'model_path is required'}), 400
+    try:
+        model_dir = _resolve_model_dir(model_path)
+    except FileNotFoundError as e:
+        return jsonify({'error': str(e)}), 400
+
+    fam = str(payload.get('family') or _infer_family_from_path(model_path)).strip().lower()
+    rows = _rows_from_inputs(payload)
+    if not rows:
+        return jsonify({'error': 'Provide text or inputs with at least one item'}), 400
+    threshold = float(payload.get('threshold', 0.5))
+    batch_size = int(payload.get('batch_size', 8))
+
+    # Write a temporary JSONL and run batch predictors
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+        for r in rows:
+            tmp.write(json.dumps(r) + '\n')
+    try:
+        y_prob = _predict_probs(model_dir, fam, tmp_path, batch_size=batch_size)
+    except Exception as e:
+        # Clean up temp before returning
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        return jsonify({'error': f'inference failed: {type(e).__name__}: {str(e)}'}), 500
+    # Clean temp file
+    try:
+        os.unlink(tmp_path)
+    except Exception:
+        pass
+
+    y_pred = (y_prob >= float(threshold)).astype(int)
+    preds = []
+    for i in range(y_prob.shape[0]):
+        row = {
+            'probs': [float(x) for x in y_prob[i].tolist()],
+            'pred': [int(x) for x in y_pred[i].tolist()],
+        }
+        preds.append(row)
+
+    return jsonify({
+        'model': str(model_dir),
+        'family': fam,
+        'labels': LABELS,
+        'threshold': float(threshold),
+        'n': int(y_prob.shape[0]),
+        'predictions': preds,
+    })
+
 if __name__ == '__main__':
     print("🚀 BitDance Backend Server Starting...")
     print(f"📊 Loaded {len(REAL_METRICS)} real metrics files")
@@ -508,5 +684,5 @@ if __name__ == '__main__':
         print(f"\n🏆 Best Model: {best_model['model'].split('/')[-1]} (F1: {best_model['micro']['f1']:.3f})")
         print(f"📊 Average F1: {avg_f1:.3f}")
         print(f"📝 Test Set: {REAL_METRICS[0]['n_samples']} samples\n")
-    
+    print("🧪 Inference endpoint: POST /api/inference/predict {model_path, text|inputs}")
     app.run(debug=True, host='0.0.0.0', port=5001)
