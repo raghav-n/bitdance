@@ -91,13 +91,10 @@ def full_run(
     specs = discover_tasks()
     required = [
         "ingest_all",
-        "normalize",
-        "eda",
-        "augment",
         "annotate",
-        "featurize",
+        "augment",
+        "normalize",
         "train",
-        "evaluate",
     ]
     missing = [r for r in required if r not in specs]
     if missing:
@@ -108,14 +105,13 @@ def full_run(
         )
         raise typer.Exit(code=1)
 
+    # Streamlined pipeline: go straight from normalize to train.
     edges = [
-        ("ingest_all", "normalize"),
-        ("normalize", "eda"),
-        ("normalize", "augment"),
-        ("normalize", "annotate"),
-        ("annotate", "featurize"),
-        ("featurize", "train"),
-        ("train", "evaluate"),
+        ("ingest_all", "annotate"),
+        ("annotate", "augment"),
+        ("annotate", "normalize"),
+        ("augment", "normalize"),
+        ("normalize", "train"),
     ]
 
     params = load_config(config)
