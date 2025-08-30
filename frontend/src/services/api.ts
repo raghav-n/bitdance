@@ -181,6 +181,49 @@ class ApiService {
     return this.request(`/violations/examples?category=${encodeURIComponent(category)}`);
   }
 
+  async analyzeViolations(text: string, modelPath: string = "encoder/enc-distilbert-base", threshold: number = 0.5): Promise<any> {
+    try {
+      return await this.request('/inference/predict', {
+        method: 'POST',
+        body: JSON.stringify({
+          model_path: modelPath,
+          family: "encoder", // Default to encoder family
+          text: text,
+          threshold: threshold,
+          batch_size: 8
+        }),
+      });
+    } catch (error) {
+      // If inference fails, provide a meaningful mock response indicating models need training
+      console.warn('Model inference failed, providing mock response:', error);
+      
+      // Generate mock response based on simple keyword analysis
+      const lowerText = text.toLowerCase();
+      const mockPredictions = {
+        probs: [
+          lowerText.includes('irrelevant') || lowerText.includes('useless') ? 0.8 : 0.2,
+          lowerText.includes('call') || lowerText.includes('website') || lowerText.includes('promotion') ? 0.9 : 0.1,
+          lowerText.includes('heard') || lowerText.includes('friend said') || lowerText.includes('someone told') ? 0.7 : 0.3
+        ],
+        pred: [
+          lowerText.includes('irrelevant') || lowerText.includes('useless') ? 1 : 0,
+          lowerText.includes('call') || lowerText.includes('website') || lowerText.includes('promotion') ? 1 : 0,
+          lowerText.includes('heard') || lowerText.includes('friend said') || lowerText.includes('someone told') ? 1 : 0
+        ]
+      };
+      
+      return {
+        model: "Mock Analysis (Models need training)",
+        family: "mock",
+        labels: ["irrelevant_content", "advertisement", "review_without_visit"],
+        threshold: threshold,
+        n: 1,
+        predictions: [mockPredictions],
+        _isMockResponse: true
+      };
+    }
+  }
+
   // Models API
   async getModelList(): Promise<ModelSummary[]> {
     return this.request<ModelSummary[]>('/models/list');

@@ -24,11 +24,11 @@ augment:
 ingest:
     sources:
         - name: "restaurant_reviews"
-          path: "data/archive/reviews.csv"
+          path: "data/reviews.csv"
     image:
         resize_dimensions: [224, 224]
         format: "RGB"
-        base_path: "data/archive/dataset" # Add this
+        base_path: "data/dataset" # Updated path
 
 annotate:
     llm:
@@ -60,12 +60,13 @@ train:
     # When provided, each item can override knobs; unspecified fields inherit from above.
     # If use_modal is true, each model runs in a separate container with the same Modal volume.
     models:
-    #   - family: "encoder" # "baseline" | "encoder" | "sft"
-    #     model_name: "xlm-roberta-base"
-    #     batch_size: 16
-    #     lr: 3e-5
-    #     epochs: 10
-    #     run_name: "enc-xlm-roberta-base"
+      - family: "encoder" # "baseline" | "encoder" | "sft"
+        model_name: "distilbert-base-uncased"
+        batch_size: 16
+        lr: 3e-5
+        epochs: 5
+        run_name: "enc-distilbert-base"
+        use_modal: false  # Train locally for faster setup
 
     #   - family: "encoder" # "baseline" | "encoder" | "sft"
     #     model_name: "bert-large-cased"
@@ -92,14 +93,14 @@ train:
     #     epochs: 3
     #     run_name: "sft-gemma-3-12b"
 
-      - family: "fraud_scan"
-        min_reviews: 5
-        topk: 5
-        overall_threshold: 0.6
-        sim_threshold: 0.80
-        high_sim_threshold: 0.90
-        min_cluster_size: 2
-        dup_threshold: 0.90
+    #   - family: "fraud_scan"
+    #     min_reviews: 5
+    #     topk: 5
+    #     overall_threshold: 0.6
+    #     sim_threshold: 0.80
+    #     high_sim_threshold: 0.90
+    #     min_cluster_size: 2
+    #     dup_threshold: 0.90
 
 evaluate:
     threshold: 0.5

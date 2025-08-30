@@ -1,0 +1,62 @@
+{
+  "model": "encoder/enc-distilbert-base",
+  "family": "encoder",
+  "labels": [
+    "irrelevant_content",
+    "advertisement",
+    "review_without_visit"
+  ],
+  "threshold": 0.5,
+  "n_samples": 330,
+  "per_label": {
+    "irrelevant_content": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "ap": 0.1684763379035825,
+      "support": 4,
+      "confusion": {
+        "tn": 326,
+        "fp": 0,
+        "fn": 4,
+        "tp": 0
+      }
+    },
+    "advertisement": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "ap": 0.0,
+      "support": 0,
+      "confusion": {
+        "tn": 330,
+        "fp": 0,
+        "fn": 0,
+        "tp": 0
+      }
+    },
+    "review_without_visit": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "ap": 0.1297979797979798,
+      "support": 3,
+      "confusion": {
+        "tn": 327,
+        "fp": 0,
+        "fn": 3,
+        "tp": 0
+      }
+    }
+  },
+  "macro": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  },
+  "micro": {
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  }
+}

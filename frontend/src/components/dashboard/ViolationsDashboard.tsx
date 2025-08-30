@@ -26,13 +26,14 @@ import {
   import { apiService, type ViolationStats } from "@/services/api";
   
   const ViolationsDashboard = () => {
-    const [testText, setTestText] = useState("");
-    const [analysisResult, setAnalysisResult] = useState(null);
-    const [selectedViolationType, setSelectedViolationType] = useState("irrelevant_content");
-    const [isPolicyGuidelinesOpen, setIsPolicyGuidelinesOpen] = useState(false);
-    const [violationsData, setViolationsData] = useState<ViolationStats | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+      const [testText, setTestText] = useState("");
+  const [analysisResult, setAnalysisResult] = useState(null);
+  const [selectedViolationType, setSelectedViolationType] = useState("irrelevant_content");
+  const [isPolicyGuidelinesOpen, setIsPolicyGuidelinesOpen] = useState(false);
+  const [violationsData, setViolationsData] = useState<ViolationStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   
     // Fetch real violation data from API
     useEffect(() => {
@@ -98,50 +99,121 @@ import {
       }
     };
   
-    // Mock analysis function
-    const analyzeViolations = (text: string) => {
-      const categories = ['Relevant', 'Advertisement', 'Inappropriate Content', 'Spam', 'Rant without Visit'];
-      const randomCategory = categories[Math.floor(Math.random() * categories.length)];
-      const confidence = 0.7 + Math.random() * 0.3;
+      // Real model analysis function
+  const analyzeViolations = async (text: string) => {
+    try {
+      setIsAnalyzing(true);
+      const response = await apiService.analyzeViolations(text);
       
-      const policies = {
-        advertisement: Math.random(),
-        inappropriate_content: Math.random(),
-        spam: Math.random(),
-        rant_without_visit: Math.random()
+      // Extract predictions from the model response
+      const { predictions, labels, threshold } = response;
+      const prediction = predictions[0]; // First (and only) prediction
+      const probs = prediction.probs;
+      const preds = prediction.pred;
+      
+      // Map model labels to friendly names
+      const labelMapping = {
+        'irrelevant_content': 'Irrelevant Content',
+        'advertisement': 'Advertisement', 
+        'review_without_visit': 'Rant without Visit'
       };
-  
-      const highRiskViolations = Object.entries(policies).filter(([_, score]) => score > 0.8);
-      const mediumRiskViolations = Object.entries(policies).filter(([_, score]) => score > 0.5 && score <= 0.8);
       
-      const totalViolations = highRiskViolations.length + mediumRiskViolations.length;
-      const riskLevel = highRiskViolations.length > 0 ? 'High' : mediumRiskViolations.length > 0 ? 'Medium' : 'Low';
-  
+      // Find the highest probability violation
+      let maxViolationProb = 0;
+      let primaryViolation = 'Relevant';
+      let violationDetails = [];
+      
+      labels.forEach((label: string, index: number) => {
+        const prob = probs[index];
+        const isPredicted = preds[index] === 1;
+        const friendlyName = labelMapping[label] || label.replace('_', ' ');
+        
+        if (isPredicted && prob > maxViolationProb) {
+          maxViolationProb = prob;
+          primaryViolation = friendlyName;
+        }
+        
+        if (isPredicted) {
+          violationDetails.push({
+            category: friendlyName,
+            probability: prob,
+            confidence: prob
+          });
+        }
+      });
+      
+      // Determine risk level based on predictions and confidence
+      const totalViolations = preds.reduce((sum: number, pred: number) => sum + pred, 0);
+      const avgConfidence = totalViolations > 0 ? 
+        violationDetails.reduce((sum, v) => sum + v.confidence, 0) / violationDetails.length : 0;
+      
+      let riskLevel = 'Low';
+      if (totalViolations > 0) {
+        if (maxViolationProb > 0.8) {
+          riskLevel = 'High';
+        } else if (maxViolationProb > 0.6) {
+          riskLevel = 'Medium';
+        }
+      }
+      
+      // Categorize violations by risk level
+      const highRiskViolations = violationDetails
+        .filter(v => v.confidence > 0.8)
+        .map(v => v.category);
+      const mediumRiskViolations = violationDetails
+        .filter(v => v.confidence > 0.6 && v.confidence <= 0.8)
+        .map(v => v.category);
+      
+      // Generate recommendation
       let recommendation = "No action required.";
       if (riskLevel === 'High') {
         recommendation = "Immediate review required. Consider removing or flagging this content.";
       } else if (riskLevel === 'Medium') {
         recommendation = "Manual review recommended to verify policy compliance.";
       }
-  
+      
+      // Generate explanation
+      const explanation = totalViolations === 0 
+        ? "Content appears to be relevant and compliant with all policies."
+        : `Analysis detected ${totalViolations} potential policy violation${totalViolations > 1 ? 's' : ''}. Primary classification: ${primaryViolation} with ${(maxViolationProb * 100).toFixed(1)}% confidence.`;
+      
       return {
-        category: randomCategory,
-        confidence,
+        category: totalViolations === 0 ? 'Relevant' : primaryViolation,
+        confidence: totalViolations === 0 ? 1 - Math.max(...probs) : maxViolationProb,
         violations: totalViolations,
         riskLevel,
-        highRiskViolations: highRiskViolations.map(([policy, _]) => policy.replace('_', ' ').toUpperCase()),
-        mediumRiskViolations: mediumRiskViolations.map(([policy, _]) => policy.replace('_', ' ').toUpperCase()),
-        explanation: `Analysis detected ${totalViolations} potential policy violations. The content appears to be ${randomCategory.toLowerCase()} with ${(confidence * 100).toFixed(1)}% confidence.`,
-        recommendation
+        highRiskViolations,
+        mediumRiskViolations,
+        explanation,
+        recommendation,
+        modelResponse: response, // Store full response for debugging
+        isMockResponse: response._isMockResponse || false
       };
-    };
+      
+    } catch (error) {
+      console.error('Error analyzing violations:', error);
+      // Fallback to show error state
+      return {
+        category: 'Error',
+        confidence: 0,
+        violations: 0,
+        riskLevel: 'Unknown',
+        highRiskViolations: [],
+        mediumRiskViolations: [],
+        explanation: `Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        recommendation: "Please try again or contact support if the issue persists."
+      };
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
   
-    const handleAnalyze = () => {
-      if (testText.trim()) {
-        const result = analyzeViolations(testText);
-        setAnalysisResult(result);
-      }
-    };
+      const handleAnalyze = async () => {
+    if (testText.trim()) {
+      const result = await analyzeViolations(testText);
+      setAnalysisResult(result);
+    }
+  };
   
     // Use real data from API, fallback to mock data if API fails
     const currentViolationsData = violationsData || fallbackViolationData;
@@ -211,13 +283,16 @@ import {
         {/* Page Header */}
         <div>
           <h1 className="text-3xl font-bold">Policy Violations</h1>
-          <p className="text-gray-600 mt-2">Real violation data from 5 model analysis</p>
+          <p className="text-gray-600 mt-2">Real violation data from trained ML models - Test reviews with live AI analysis</p>
         </div>
   
         {/* Violation Testing Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Test Review for Violations</CardTitle>
+            <CardTitle>AI-Powered Review Analysis</CardTitle>
+            <CardDescription>
+              Test restaurant reviews using your trained model to detect policy violations in real-time
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <Textarea
@@ -227,14 +302,35 @@ import {
               className="min-h-[120px]"
             />
             
-            <Button onClick={handleAnalyze} disabled={!testText.trim()}>
-              Analyze
+            <Button onClick={handleAnalyze} disabled={!testText.trim() || isAnalyzing}>
+              {isAnalyzing ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                'Analyze with AI Model'
+              )}
             </Button>
   
             {/* Analysis Results */}
             {analysisResult && (
               <div className="space-y-4 pt-4 border-t">
                 <h3 className="text-lg font-semibold">Analysis Results</h3>
+                
+                {/* Mock Response Warning */}
+                {analysisResult.isMockResponse && (
+                  <Alert className="border-orange-200 bg-orange-50">
+                    <AlertTriangle className="h-4 w-4 text-orange-600" />
+                    <AlertDescription className="text-orange-800">
+                      <strong>⚠️ Demo Mode:</strong> Using keyword-based mock analysis. Train your models first to use real AI predictions.
+                      <br />
+                      <code className="text-xs bg-orange-100 px-1 rounded mt-1 inline-block">
+                        python -m src.orchestrator.cli train
+                      </code>
+                    </AlertDescription>
+                  </Alert>
+                )}
                 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <Card>
