@@ -25,3 +25,21 @@ reports/
 # Logs
 *.log
 logs/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# Frontend build files
+frontend/dist/
+frontend/build/
+frontend/.vite/
+frontend/.next/
+frontend/out/
+
+# Package manager lock files (keep package-lock.json but ignore yarn.lock)
+yarn.lock
