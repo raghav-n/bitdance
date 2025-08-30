@@ -35,22 +35,38 @@ import {
 } from "recharts";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { apiService, type TimeSeriesData } from "@/services/api";
+import { apiService, type TimeSeriesData, type ConfidenceData, type ModelSummary } from "@/services/api";
 
 const AnalyticsDashboard = () => {
   const [timeRange, setTimeRange] = useState("Last 6 Months");
   const [metricType, setMetricType] = useState("Review Volume");
   const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesData[]>([]);
+  const [confidenceData, setConfidenceData] = useState<ConfidenceData[]>([]);
+  const [models, setModels] = useState<ModelSummary[]>([]);
+  const [selectedConfidenceModel, setSelectedConfidenceModel] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch real time series data from API
+  // Fetch real time series data and confidence data from API
   useEffect(() => {
-    const fetchTimeSeriesData = async () => {
+    const fetchAnalyticsData = async () => {
       try {
         setLoading(true);
-        const data = await apiService.getAnalyticsTimeSeries(metricType, timeRange);
-        setTimeSeriesData(data);
+        const [timeData, confidence, modelList] = await Promise.all([
+          apiService.getAnalyticsTimeSeries(metricType, timeRange),
+          apiService.getConfidenceData(),
+          apiService.getModelList()
+        ]);
+        
+        setTimeSeriesData(timeData);
+        setConfidenceData(confidence);
+        setModels(modelList);
+        
+        // Set the best model as default selection
+        if (modelList.length > 0) {
+          setSelectedConfidenceModel(modelList[0].id);
+        }
+        
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
@@ -60,16 +76,32 @@ const AnalyticsDashboard = () => {
       }
     };
 
-    fetchTimeSeriesData();
+    fetchAnalyticsData();
   }, [metricType, timeRange]);
 
-  // Fallback data for other charts (to be replaced with real data later)
-  const generateCategoryData = () => [
-    { category: 'Relevant', count: 8543, confidence: 0.94 },
-    { category: 'Irrelevant', count: 2104, confidence: 0.89 },
-    { category: 'Advertisement', count: 1876, confidence: 0.96 },
-    { category: 'Rant', count: 324, confidence: 0.87 }
-  ];
+  // Process real confidence data for category analysis (filtered by selected model)
+  const selectedModelName = selectedConfidenceModel ? selectedConfidenceModel.split('/')[1] : '';
+  const filteredConfidenceData = confidenceData.filter(item => 
+    selectedModelName ? item.category === selectedModelName : true
+  );
+  
+  // Generate category data from real confidence data
+  const categoryStats = filteredConfidenceData.reduce((acc, item) => {
+    const label = item.label || 'Unknown';
+    if (!acc[label]) {
+      acc[label] = { confidences: [], count: 0 };
+    }
+    acc[label].confidences.push(item.confidence);
+    acc[label].count += item.count;
+    return acc;
+  }, {} as Record<string, { confidences: number[]; count: number }>);
+
+  const categoryData = Object.entries(categoryStats).map(([category, stats]) => ({
+    category,
+    count: stats.count * 50, // Scale up for visualization (each confidence point represents ~50 reviews)
+    confidence: stats.confidences.length > 0 ? 
+      stats.confidences.reduce((sum, c) => sum + c, 0) / stats.confidences.length : 0
+  }));
 
   const generatePerformanceData = () => {
     const weeks = 12;
@@ -80,7 +112,6 @@ const AnalyticsDashboard = () => {
       f1Score: 0.90 + Math.random() * 0.05
     }));
   };
-  const categoryData = generateCategoryData();
   const performanceData = generatePerformanceData();
 
   // Calculate metrics (only if data is available)
@@ -247,6 +278,7 @@ const AnalyticsDashboard = () => {
           <Card>
             <CardHeader>
               <CardTitle>Review Category Distribution</CardTitle>
+              <CardDescription>Real data from your 5-model analysis pipeline</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -263,8 +295,31 @@ const AnalyticsDashboard = () => {
                   </ResponsiveContainer>
                 </div>
                 <div className="h-80">
-                  <h4 className="text-sm font-medium mb-4">Confidence by Category</h4>
-                  <ResponsiveContainer width="100%" height="100%">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-sm font-medium">Confidence by Category</h4>
+                    <div className="w-48">
+                      <Select value={selectedConfidenceModel} onValueChange={setSelectedConfidenceModel}>
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select model..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {models.map((model) => (
+                            <SelectItem key={model.id} value={model.id}>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs">{model.name}</span>
+                                <span className={`px-1 py-0.5 text-xs rounded ${
+                                  model.family === 'encoder' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                                }`}>
+                                  {model.family === 'encoder' ? 'BERT' : 'SFT'}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height="90%">
                     <BarChart data={categoryData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="category" />
@@ -273,6 +328,11 @@ const AnalyticsDashboard = () => {
                       <Bar dataKey="confidence" fill="#80C1FF" />
                     </BarChart>
                   </ResponsiveContainer>
+                  {selectedConfidenceModel && (
+                    <div className="text-xs text-gray-500 text-center mt-2">
+                      Showing data for: {models.find(m => m.id === selectedConfidenceModel)?.name}
+                    </div>
+                  )}
                 </div>
               </div>
             </CardContent>

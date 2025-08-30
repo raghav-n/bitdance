@@ -51,6 +51,8 @@ const ClassificationDashboard = () => {
   const [modelInsights, setModelInsights] = useState<ModelInsights[]>([]);
   const [models, setModels] = useState<ModelSummary[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [selectedConfidenceModel, setSelectedConfidenceModel] = useState<string>('');
+  const [selectedCategoryModel, setSelectedCategoryModel] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,6 +76,8 @@ const ClassificationDashboard = () => {
         // Set the best model as default selection
         if (modelList.length > 0) {
           setSelectedModel(modelList[0].id);
+          setSelectedConfidenceModel(modelList[0].id);
+          setSelectedCategoryModel(modelList[0].id);
         }
         
         setError(null);
@@ -88,12 +92,17 @@ const ClassificationDashboard = () => {
     fetchClassificationData();
   }, []);
 
-  // Process confidence data for histogram
-  const confidenceBins = confidenceData.reduce((acc, item) => {
+  // Process confidence data for histogram (filtered by selected model)
+  const selectedModelName = selectedConfidenceModel ? selectedConfidenceModel.split('/')[1] : '';
+  const filteredConfidenceData = confidenceData.filter(item => 
+    selectedModelName ? item.category === selectedModelName : true
+  );
+  
+  const confidenceBins = filteredConfidenceData.reduce((acc, item) => {
     const bin = Math.floor(item.confidence * 10) / 10;
-    const key = `${bin.toFixed(1)}-${item.category}`;
+    const key = `${bin.toFixed(1)}`;
     if (!acc[key]) {
-      acc[key] = { bin: bin.toFixed(1), category: item.category, count: 0 };
+      acc[key] = { bin: bin.toFixed(1), count: 0 };
     }
     acc[key].count += item.count;
     return acc;
@@ -110,20 +119,26 @@ const ClassificationDashboard = () => {
     support: 211 // All models tested on same dataset
   }));
 
-  // Generate category stats from confidence data
-  const categoryStats = confidenceData.reduce((acc, item) => {
-    if (!acc[item.category]) {
-      acc[item.category] = { category: item.category, confidences: [], sampleCount: 0 };
+  // Generate category stats from confidence data for Category Analysis (filtered by selected category model)
+  const selectedCategoryModelName = selectedCategoryModel ? selectedCategoryModel.split('/')[1] : '';
+  const filteredCategoryData = confidenceData.filter(item => 
+    selectedCategoryModelName ? item.category === selectedCategoryModelName : true
+  );
+  
+  const categoryStats = filteredCategoryData.reduce((acc, item) => {
+    const label = item.label || 'Unknown';
+    if (!acc[label]) {
+      acc[label] = { category: label, confidences: [], sampleCount: 0 };
     }
-    acc[item.category].confidences.push(item.confidence);
-    acc[item.category].sampleCount += item.count;
+    acc[label].confidences.push(item.confidence);
+    acc[label].sampleCount += item.count;
     return acc;
   }, {} as Record<string, { category: string; confidences: number[]; sampleCount: number }>);
 
   const categoryStatsArray = Object.values(categoryStats).map(stat => ({
     category: stat.category,
-    meanConfidence: stat.confidences.reduce((sum, c) => sum + c, 0) / stat.confidences.length,
-    stdConfidence: Math.sqrt(stat.confidences.reduce((sum, c) => sum + Math.pow(c - (stat.confidences.reduce((s, x) => s + x, 0) / stat.confidences.length), 2), 0) / stat.confidences.length),
+    meanConfidence: stat.confidences.length > 0 ? stat.confidences.reduce((sum, c) => sum + c, 0) / stat.confidences.length : 0,
+    stdConfidence: stat.confidences.length > 0 ? Math.sqrt(stat.confidences.reduce((sum, c) => sum + Math.pow(c - (stat.confidences.reduce((s, x) => s + x, 0) / stat.confidences.length), 2), 0) / stat.confidences.length) : 0,
     sampleCount: stat.sampleCount
   }));
 
@@ -236,7 +251,38 @@ const ClassificationDashboard = () => {
       {/* Confidence Distribution */}
       <Card>
         <CardHeader>
-          <CardTitle>Confidence Distribution</CardTitle>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Confidence Distribution</CardTitle>
+              <CardDescription>
+                Distribution of prediction confidence scores for selected model
+              </CardDescription>
+            </div>
+            <div className="w-64">
+              <Select value={selectedConfidenceModel} onValueChange={setSelectedConfidenceModel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a model..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium">{model.name}</span>
+                        <div className="flex items-center space-x-2 ml-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            model.family === 'encoder' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                          }`}>
+                            {model.family === 'encoder' ? 'BERT' : 'SFT'}
+                          </span>
+                          <span className="text-sm font-mono">F1: {(model.f1_score * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-96">
@@ -255,6 +301,13 @@ const ClassificationDashboard = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          {selectedConfidenceModel && (
+            <div className="mt-4 text-sm text-gray-600 text-center">
+              Showing confidence distribution for: <span className="font-semibold">
+                {models.find(m => m.id === selectedConfidenceModel)?.name}
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -333,7 +386,38 @@ const ClassificationDashboard = () => {
       {/* Category Analysis */}
       <Card>
         <CardHeader>
-          <CardTitle>Category Analysis</CardTitle>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Category Analysis</CardTitle>
+              <CardDescription>
+                Detailed confidence statistics per category for selected model
+              </CardDescription>
+            </div>
+            <div className="w-64">
+              <Select value={selectedCategoryModel} onValueChange={setSelectedCategoryModel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a model..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium">{model.name}</span>
+                        <div className="flex items-center space-x-2 ml-4">
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            model.family === 'encoder' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                          }`}>
+                            {model.family === 'encoder' ? 'BERT' : 'SFT'}
+                          </span>
+                          <span className="text-sm font-mono">F1: {(model.f1_score * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <Table>
@@ -356,6 +440,13 @@ const ClassificationDashboard = () => {
               ))}
             </TableBody>
           </Table>
+          {selectedCategoryModel && (
+            <div className="mt-4 text-sm text-gray-600 text-center">
+              Showing category analysis for: <span className="font-semibold">
+                {models.find(m => m.id === selectedCategoryModel)?.name}
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

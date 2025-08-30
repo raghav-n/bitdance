@@ -77,9 +77,10 @@ interface ClassificationPerformance {
 }
 
 interface ConfidenceData {
-  category: string;
+  category: string; // Now represents model name
   confidence: number;
   count: number;
+  label?: string; // The actual classification label (Irrelevant, Advertisement, etc.)
 }
 
 interface ModelInsights {

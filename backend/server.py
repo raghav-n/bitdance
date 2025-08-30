@@ -328,12 +328,10 @@ def get_model_details(model_id):
 
 @app.route('/api/classification/confidence-data')
 def get_confidence_data():
-    """Generate confidence distribution data from ALL 3 real metrics"""
+    """Generate confidence distribution data from ALL 5 real metrics"""
     if not REAL_METRICS:
         raise Exception("No real metrics data loaded!")
     
-    # Use real metrics to generate realistic confidence distributions
-    best_model = max(REAL_METRICS, key=lambda x: x['micro']['f1'])
     data = []
     
     category_map = {
@@ -342,23 +340,28 @@ def get_confidence_data():
         'review_without_visit': 'Rant without Visit'
     }
     
-    for label, metrics in best_model['per_label'].items():
-        category = category_map.get(label, label.replace('_', ' ').title())
-        precision = metrics['precision']
-        recall = metrics['recall']
+    # Generate confidence data for each model
+    for model_metric in REAL_METRICS:
+        model_name = model_metric['model'].split('/')[-1]  # Get model name like 'enc-bert-large-cased'
         
-        # Generate confidence distribution based on performance
-        # Higher performing categories get higher confidence scores
-        alpha = max(2, precision * 10)  # Higher precision = higher confidence
-        beta = max(2, (1 - recall) * 10)  # Lower recall = more uncertainty
-        
-        for _ in range(50):  # Generate 50 samples per category
-            confidence = np.random.beta(alpha, beta)
-            data.append({
-                'category': category,
-                'confidence': float(confidence),
-                'count': 1
-            })
+        for label, metrics in model_metric['per_label'].items():
+            category = category_map.get(label, label.replace('_', ' ').title())
+            precision = metrics['precision']
+            recall = metrics['recall']
+            
+            # Generate confidence distribution based on performance
+            # Higher performing categories get higher confidence scores
+            alpha = max(2, precision * 10)  # Higher precision = higher confidence
+            beta = max(2, (1 - recall) * 10)  # Lower recall = more uncertainty
+            
+            for _ in range(20):  # Generate 20 samples per category per model
+                confidence = np.random.beta(alpha, beta)
+                data.append({
+                    'category': model_name,  # Use model name as category for filtering
+                    'confidence': float(confidence),
+                    'count': 1,
+                    'label': category  # Keep the actual label for reference
+                })
     
     return jsonify(data)
 
