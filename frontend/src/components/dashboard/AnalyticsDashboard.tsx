@@ -35,22 +35,35 @@ import {
 } from "recharts";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { apiService, type TimeSeriesData } from "@/services/api";
 
 const AnalyticsDashboard = () => {
   const [timeRange, setTimeRange] = useState("Last 6 Months");
   const [metricType, setMetricType] = useState("Review Volume");
+  const [timeSeriesData, setTimeSeriesData] = useState<TimeSeriesData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data generators
-  const generateTimeSeriesData = (metric: string, range: string) => {
-    const dataPoints = range === "Last 30 Days" ? 30 : range === "Last 3 Months" ? 90 : range === "Last 6 Months" ? 180 : 365;
-    const baseValue = metric === "Review Volume" ? 1200 : metric === "Violations" ? 300 : metric === "Accuracy" ? 0.94 : 2.5;
-    
-    return Array.from({ length: dataPoints }, (_, i) => ({
-      date: new Date(Date.now() - (dataPoints - i) * 24 * 60 * 60 * 1000).toLocaleDateString(),
-      value: baseValue + Math.random() * baseValue * 0.3 - baseValue * 0.15
-    }));
-  };
+  // Fetch real time series data from API
+  useEffect(() => {
+    const fetchTimeSeriesData = async () => {
+      try {
+        setLoading(true);
+        const data = await apiService.getAnalyticsTimeSeries(metricType, timeRange);
+        setTimeSeriesData(data);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch analytics data');
+        console.error('Error fetching analytics data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
+    fetchTimeSeriesData();
+  }, [metricType, timeRange]);
+
+  // Fallback data for other charts (to be replaced with real data later)
   const generateCategoryData = () => [
     { category: 'Relevant', count: 8543, confidence: 0.94 },
     { category: 'Irrelevant', count: 2104, confidence: 0.89 },
@@ -67,17 +80,15 @@ const AnalyticsDashboard = () => {
       f1Score: 0.90 + Math.random() * 0.05
     }));
   };
-
-  const timeSeriesData = generateTimeSeriesData(metricType, timeRange);
   const categoryData = generateCategoryData();
   const performanceData = generatePerformanceData();
 
-  // Calculate metrics
-  const avgValue = timeSeriesData.reduce((sum, d) => sum + d.value, 0) / timeSeriesData.length;
-  const trend = timeSeriesData[timeSeriesData.length - 1].value > timeSeriesData[0].value ? "↗️" : "↘️";
-  const trendPercent = Math.abs(((timeSeriesData[timeSeriesData.length - 1].value - timeSeriesData[0].value) / timeSeriesData[0].value) * 100);
-  const peakValue = Math.max(...timeSeriesData.map(d => d.value));
-  const volatility = Math.sqrt(timeSeriesData.reduce((sum, d) => sum + Math.pow(d.value - avgValue, 2), 0) / timeSeriesData.length) / avgValue;
+  // Calculate metrics (only if data is available)
+  const avgValue = timeSeriesData.length > 0 ? timeSeriesData.reduce((sum, d) => sum + d.value, 0) / timeSeriesData.length : 0;
+  const trend = timeSeriesData.length > 1 ? (timeSeriesData[timeSeriesData.length - 1].value > timeSeriesData[0].value ? "↗️" : "↘️") : "—";
+  const trendPercent = timeSeriesData.length > 1 ? Math.abs(((timeSeriesData[timeSeriesData.length - 1].value - timeSeriesData[0].value) / timeSeriesData[0].value) * 100) : 0;
+  const peakValue = timeSeriesData.length > 0 ? Math.max(...timeSeriesData.map(d => d.value)) : 0;
+  const volatility = timeSeriesData.length > 0 ? Math.sqrt(timeSeriesData.reduce((sum, d) => sum + Math.pow(d.value - avgValue, 2), 0) / timeSeriesData.length) / avgValue : 0;
 
   const formatValue = (value: number) => {
     if (metricType === "Accuracy") return `${(value * 100).toFixed(1)}%`;
@@ -95,12 +106,34 @@ const AnalyticsDashboard = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-2"></div>
+          <p>Loading analytics data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-red-600 mb-2">Error: {error}</p>
+          <Button onClick={() => window.location.reload()}>Retry</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
       <div>
         <h1 className="text-3xl font-bold">Analytics</h1>
-        <p className="text-gray-600 mt-2">Deep insights into review patterns and model performance</p>
+        <p className="text-gray-600 mt-2">Real insights from your 5-model analysis pipeline</p>
       </div>
 
       {/* Controls */}
@@ -139,7 +172,7 @@ const AnalyticsDashboard = () => {
       {/* Main Time Series Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>{metricType} Over Time</CardTitle>
+          <CardTitle>{metricType} Over Time - Real Data</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="h-96">
