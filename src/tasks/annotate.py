@@ -1,5 +1,6 @@
 """Annotation task: rule-based and Gemini LLM-based policy violation detection."""
 
+import os
 import re
 import pandas as pd
 import time
@@ -12,29 +13,42 @@ import google.generativeai as genai
 
 from ..orchestrator import task
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- Policy Detector Classes ---
 
+
 class PolicyDetector:
     """Base class for policy detectors."""
+
     def description(self):
         return ""
+
     def few_shot_examples(self):
         return []
+
 
 class NoAdvertisementPolicy(PolicyDetector):
     def description(self):
         return "Reviews should not contain promotional content, advertisements, or links to external websites."
+
     def detect(self, review_text: str):
         url_pattern = r"(https?://|www\.)"
         promo_words = ["visit", "discount", "promo", "deal", "offer", "sale"]
         url_found = bool(re.search(url_pattern, review_text, re.IGNORECASE))
         promo_count = sum(word in review_text.lower() for word in promo_words)
         if url_found and promo_count > 0:
-            return True, 0.99, "Contains URL and promotional word (likely advertisement)"
+            return (
+                True,
+                0.99,
+                "Contains URL and promotional word (likely advertisement)",
+            )
         if promo_count >= 2:
             return True, 0.96, "Contains multiple promotional words"
         return False, 0.7, "No strong advertisement detected"
+
     def few_shot_examples(self):
         return [
             {
@@ -44,8 +58,8 @@ class NoAdvertisementPolicy(PolicyDetector):
                     "confidence": 0.98,
                     "reasoning": "Contains promotional language and a URL.",
                     "violation_type": "advertisement",
-                    "indicators": ["Visit", "www.pizzapromo.com", "discounts"]
-                }
+                    "indicators": ["Visit", "www.pizzapromo.com", "discounts"],
+                },
             },
             {
                 "review": "Try our new burger deal at www.burgerpromo.com!",
@@ -54,8 +68,8 @@ class NoAdvertisementPolicy(PolicyDetector):
                     "confidence": 0.97,
                     "reasoning": "Promotional offer and website link.",
                     "violation_type": "advertisement",
-                    "indicators": ["deal", "www.burgerpromo.com"]
-                }
+                    "indicators": ["deal", "www.burgerpromo.com"],
+                },
             },
             {
                 "review": "Great food and service, will come again.",
@@ -64,22 +78,27 @@ class NoAdvertisementPolicy(PolicyDetector):
                     "confidence": 0.99,
                     "reasoning": "No promotional content or links.",
                     "violation_type": "none",
-                    "indicators": ["food", "service"]
-                }
-            }
+                    "indicators": ["food", "service"],
+                },
+            },
         ]
+
 
 class NoIrrelevantContentPolicy(PolicyDetector):
     def description(self):
         return "Reviews must be about the location itself, not about unrelated events, trips, or other topics."
+
     def detect(self, review_text: str):
         unrelated_keywords = ["holiday", "trip", "vacation", "flight", "hotel"]
-        unrelated_count = sum(word in review_text.lower() for word in unrelated_keywords)
+        unrelated_count = sum(
+            word in review_text.lower() for word in unrelated_keywords
+        )
         if unrelated_count >= 2:
             return True, 0.95, "Mentions multiple unrelated topics"
         if unrelated_count == 1 and len(review_text.split()) < 15:
             return True, 0.92, "Short review about unrelated topic"
         return False, 0.7, "Content appears relevant"
+
     def few_shot_examples(self):
         return [
             {
@@ -89,8 +108,8 @@ class NoIrrelevantContentPolicy(PolicyDetector):
                     "confidence": 0.94,
                     "reasoning": "Mentions vacation, not focused on restaurant experience.",
                     "violation_type": "irrelevant",
-                    "indicators": ["vacation", "Hawaii"]
-                }
+                    "indicators": ["vacation", "Hawaii"],
+                },
             },
             {
                 "review": "My flight to Paris was delayed, so I stopped by this place.",
@@ -99,8 +118,8 @@ class NoIrrelevantContentPolicy(PolicyDetector):
                     "confidence": 0.93,
                     "reasoning": "Review is mostly about flight, not the location.",
                     "violation_type": "irrelevant",
-                    "indicators": ["flight", "Paris"]
-                }
+                    "indicators": ["flight", "Paris"],
+                },
             },
             {
                 "review": "The pasta was delicious and the staff were friendly.",
@@ -109,24 +128,39 @@ class NoIrrelevantContentPolicy(PolicyDetector):
                     "confidence": 0.99,
                     "reasoning": "Review is relevant to the restaurant.",
                     "violation_type": "none",
-                    "indicators": ["pasta", "staff"]
-                }
-            }
+                    "indicators": ["pasta", "staff"],
+                },
+            },
         ]
+
 
 class NoRantWithoutVisitPolicy(PolicyDetector):
     def description(self):
         return "Rants or complaints must come from actual visitors. Reviews based on hearsay or without evidence of a visit are violations."
+
     def detect(self, review_text: str):
         rant_phrases = [
-            "never been here", "haven't visited", "I heard", "someone told me", "I read"
+            "never been here",
+            "haven't visited",
+            "I heard",
+            "someone told me",
+            "I read",
         ]
-        visit_keywords = ["ate", "ordered", "visited", "went", "tried", "service", "food"]
+        visit_keywords = [
+            "ate",
+            "ordered",
+            "visited",
+            "went",
+            "tried",
+            "service",
+            "food",
+        ]
         rant_found = any(phrase in review_text.lower() for phrase in rant_phrases)
         visit_found = any(word in review_text.lower() for word in visit_keywords)
         if rant_found and not visit_found:
             return True, 0.98, "Rant phrase present and no evidence of visit"
         return False, 0.7, "Likely visited or not a rant"
+
     def few_shot_examples(self):
         return [
             {
@@ -136,8 +170,8 @@ class NoRantWithoutVisitPolicy(PolicyDetector):
                     "confidence": 0.97,
                     "reasoning": "Reviewer admits never visiting, but makes a complaint.",
                     "violation_type": "rant_without_visit",
-                    "indicators": ["Never been here", "I heard"]
-                }
+                    "indicators": ["Never been here", "I heard"],
+                },
             },
             {
                 "review": "I haven't visited, but someone told me the service is bad.",
@@ -146,8 +180,8 @@ class NoRantWithoutVisitPolicy(PolicyDetector):
                     "confidence": 0.96,
                     "reasoning": "No evidence of visit, only hearsay.",
                     "violation_type": "rant_without_visit",
-                    "indicators": ["haven't visited", "someone told me"]
-                }
+                    "indicators": ["haven't visited", "someone told me"],
+                },
             },
             {
                 "review": "I tried the pizza and loved the atmosphere.",
@@ -156,10 +190,11 @@ class NoRantWithoutVisitPolicy(PolicyDetector):
                     "confidence": 0.99,
                     "reasoning": "Reviewer describes their own experience.",
                     "violation_type": "none",
-                    "indicators": ["tried", "pizza", "atmosphere"]
-                }
-            }
+                    "indicators": ["tried", "pizza", "atmosphere"],
+                },
+            },
         ]
+
 
 POLICY_REGISTRY = {
     "NoAdvertisement": NoAdvertisementPolicy(),
@@ -167,17 +202,20 @@ POLICY_REGISTRY = {
     "NoRantWithoutVisit": NoRantWithoutVisitPolicy(),
 }
 
+
 def build_prompt(policy, review_row, few_shot_examples, policy_description):
-    review_info = "\n".join([
-        f"Business Name: {review_row.get('place_name', '')}",
-        f"User Name: {review_row.get('user_name', '')}",
-        f"Text: {review_row.get('text', '')}",
-        f"Rating: {review_row.get('rating', '')}",
-        f"Language: {review_row.get('language', '')}",
-        f"Has Image: {review_row.get('has_image', '')}",
-        f"Image Path: {review_row.get('image_path', '')}",
-        f"Metadata: {review_row.get('metadata', '')}"
-    ])
+    review_info = "\n".join(
+        [
+            f"Business Name: {review_row.get('place_name', '')}",
+            f"User Name: {review_row.get('user_name', '')}",
+            f"Text: {review_row.get('text', '')}",
+            f"Rating: {review_row.get('rating', '')}",
+            f"Language: {review_row.get('language', '')}",
+            f"Has Image: {review_row.get('has_image', '')}",
+            f"Image Path: {review_row.get('image_path', '')}",
+            f"Metadata: {review_row.get('metadata', '')}",
+        ]
+    )
     prompt = (
         f"You are an expert Google reviewer tasked with identifying policy violations in Google location reviews.\n"
         f"Policy: {policy}\n"
@@ -203,16 +241,17 @@ def build_prompt(policy, review_row, few_shot_examples, policy_description):
     prompt += f"\nReview Information:\n{review_info}\nResponse: "
     return prompt
 
+
 def safe_json_extract(text):
     # Remove markdown code block markers
     if text.startswith("```json"):
-        text = text[len("```json"):].strip()
+        text = text[len("```json") :].strip()
     if text.startswith("```"):
-        text = text[len("```"):].strip()
+        text = text[len("```") :].strip()
     if text.endswith("```"):
         text = text[:-3].strip()
     # Extract first JSON object
-    json_match = re.search(r'\{.*?\}', text, re.DOTALL)
+    json_match = re.search(r"\{.*?\}", text, re.DOTALL)
     if json_match:
         json_str = json_match.group(0)
         try:
@@ -224,17 +263,19 @@ def safe_json_extract(text):
     else:
         return {"is_violation": None, "confidence": 0.0}
 
+
 # --- Main Annotation Task ---
+
 
 @task(
     name="annotate",
     inputs=lambda p: [
         "configs/base.yaml",
-        "data/raw/restaurant_reviews/reviews_text_only.parquet"
+        "data/raw/restaurant_reviews/reviews_text_only.parquet",
     ],
     outputs=lambda p: [
         "data/annotated/restaurant_reviews/annotations.parquet",
-        "data/annotated/restaurant_reviews/annotations.csv"
+        "data/annotated/restaurant_reviews/annotations.csv",
     ],
 )
 def annotate(params: dict):
@@ -244,7 +285,7 @@ def annotate(params: dict):
     """
     config = params.get("annotate")
     llm_cfg = config.get("llm", {})
-    api_key = llm_cfg.get("gemini_api_key")
+    api_key = os.environ.get("GEMINI_API_KEY") or llm_cfg.get("gemini_api_key")
     model_name = llm_cfg.get("gemini_model", "gemini-2.5-flash-lite")
     final_conf_threshold = llm_cfg.get("final_conf_threshold", 0.9)
     startAt = llm_cfg.get("startAt", 0)
@@ -253,7 +294,9 @@ def annotate(params: dict):
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name)
 
-    reviews_df = pd.read_parquet("data/raw/restaurant_reviews/reviews_text_only.parquet")
+    reviews_df = pd.read_parquet(
+        "data/raw/restaurant_reviews/reviews_text_only.parquet"
+    )
 
     # Prepare columns for each policy
     for policy_name, detector in POLICY_REGISTRY.items():
@@ -263,6 +306,7 @@ def annotate(params: dict):
     # Annotate each review for each policy, starting at startAt
     count = 0
     from datetime import datetime
+
     print(f"Start: {datetime.now().isoformat()}")
     for idx, row in reviews_df.iloc[startAt:].iterrows():
         print(f"Row {idx}")
