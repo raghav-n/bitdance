@@ -1,0 +1,14 @@
+torch
+torchvision
+torchaudio
+transformers
+datasets
+evaluate
+scikit-learn
+trl
+peft
+accelerate
+bitsandbytes
+sentence-transformers
+torchtext
+modal==1.1.3
