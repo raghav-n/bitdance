@@ -194,12 +194,35 @@ def build_prompt(policy, review_row, few_shot_examples, policy_description):
         "- Confidence must be between 0.0 and 1.0.\n"
         "- Reasoning should be concise and reference evidence from the review.\n"
         "- indicators should be a list of keywords or phrases that triggered the decision.\n"
+        "- Do not use double quotes inside reasoning or indicators unless they are properly escaped.\n"
+        "- Prefer single quotes for quoted phrases inside reasoning."
     )
     prompt += f"\n\nPast Examples: "
     for ex in few_shot_examples:
         prompt += f"\nReview: {ex['review']}\nResponse: {json.dumps(ex['response'])}\n"
     prompt += f"\nReview Information:\n{review_info}\nResponse: "
     return prompt
+
+def safe_json_extract(text):
+    # Remove markdown code block markers
+    if text.startswith("```json"):
+        text = text[len("```json"):].strip()
+    if text.startswith("```"):
+        text = text[len("```"):].strip()
+    if text.endswith("```"):
+        text = text[:-3].strip()
+    # Extract first JSON object
+    json_match = re.search(r'\{.*?\}', text, re.DOTALL)
+    if json_match:
+        json_str = json_match.group(0)
+        try:
+            return json.loads(json_str)
+        except Exception as e:
+            print("JSON decode error:", e)
+            print("Raw JSON string:", json_str)
+            return {"is_violation": None, "confidence": 0.0}
+    else:
+        return {"is_violation": None, "confidence": 0.0}
 
 # --- Main Annotation Task ---
 
@@ -250,20 +273,7 @@ def annotate(params: dict):
             prompt = build_prompt(policy_name, row, few_shot, policy_description)
             response = model.generate_content(prompt)
             text = response.text.strip()
-            # Remove markdown code block markers if present
-            if text.startswith("```json"):
-                text = text[len("```json"):].strip()
-            if text.startswith("```"):
-                text = text[len("```"):].strip()
-            if text.endswith("```"):
-                text = text[:-3].strip()
-            json_start = text.find('{')
-            json_end = text.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                json_str = text[json_start:json_end]
-                llm_result = json.loads(json_str)
-            else:
-                llm_result = {"is_violation": None, "confidence": 0.0}
+            llm_result = safe_json_extract(text)
 
             is_violation = bool(llm_result.get("is_violation", "False"))
             confidence = float(llm_result.get("confidence", "0.0"))

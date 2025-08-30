@@ -27,9 +27,9 @@ ingest:
 
 annotate:
     llm:
-        gemini_api_key: "AIzaSyBdR-acD9CsOOzew4NFCFr3TUq9I3xXBy0"
+        gemini_api_key: "<gemini_api_key>"
         #gemini_api_url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
-        rate_limit: 1
+        rate_limit: 0.2
         final_conf_threshold: 0.8
         startAt: 0
 
