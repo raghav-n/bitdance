@@ -139,3 +139,26 @@ The unsupervised fraud‑similarity analysis should be treated as an exploratory
 The data and labels can be improved by expanding and cleaning the annotations, and by adding an active‑learning loop that prioritizes uncertain or borderline cases for manual review. Synthetic augmentation can be broadened in both content and language coverage, and the generation prompts can be adjusted to minimize repetitive templates.
 
 Finally, the pipeline itself can be strengthened by adding experiment tracking for runs and metrics, by enriching the evaluation artifacts and dashboards under `reports/metrics/`, and by extending the orchestrator with optional parallel execution and more detailed cache provenance. The Modal integration can also be deepened with job queues for larger grid searches, automated artifact synchronization, and guardrails for long‑running SFT jobs.
+
+## 5) Setting up the User Interface
+
+1. Install node modules for the frontend and run
+    ```bash
+    cd frontend
+    npm i
+    npm run dev
+    ```
+2. Install Flask API dependencies
+    ```bash
+    cd backend
+    pip install requirements.txt
+
+    ```
+    *Note: use the same virtual env as the root project*
+
+3. __IMPORTANT:__ Ensure models weights are loaded into models/checkpoint-310/ in the root dir
+
+4. Run the backend from the root dir
+    ```bash
+    python backend/server.py
+    ```
