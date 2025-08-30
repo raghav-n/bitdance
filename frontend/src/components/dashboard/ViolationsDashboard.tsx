@@ -22,53 +22,81 @@ import {
   import { Alert, AlertDescription } from "@/components/ui/alert";
   import { Badge } from "@/components/ui/badge";
   import { ChevronDown, AlertTriangle, CheckCircle, XCircle, RefreshCw } from "lucide-react";
-  import { useState } from "react";
+  import { useState, useEffect } from "react";
+  import { apiService, type ViolationStats } from "@/services/api";
   
   const ViolationsDashboard = () => {
     const [testText, setTestText] = useState("");
     const [analysisResult, setAnalysisResult] = useState(null);
-    const [selectedViolationType, setSelectedViolationType] = useState("advertisement");
+    const [selectedViolationType, setSelectedViolationType] = useState("irrelevant_content");
     const [isPolicyGuidelinesOpen, setIsPolicyGuidelinesOpen] = useState(false);
+    const [violationsData, setViolationsData] = useState<ViolationStats | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
   
-    // Mock violation data generator
-    const generateViolationData = () => ({
+    // Fetch real violation data from API
+    useEffect(() => {
+      const fetchViolationData = async () => {
+        try {
+          setLoading(true);
+          const data = await apiService.getViolationStats();
+          setViolationsData(data);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to fetch violation data');
+          console.error('Error fetching violation data:', err);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchViolationData();
+    }, []);
+
+    // Refresh function for the refresh button
+    const handleRefresh = async () => {
+      try {
+        setLoading(true);
+        const data = await apiService.getViolationStats();
+        setViolationsData(data);
+        setError(null);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to refresh violation data');
+        console.error('Error refreshing violation data:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Fallback mock data (only used if API fails) - matches API response format
+    const fallbackViolationData: ViolationStats = {
+      irrelevant_content: {
+        count: 17,
+        severity: 'Medium',
+        examples: [
+          "This content doesn't provide useful review information.",
+          "Not related to the actual restaurant experience.",
+          "Generic comment without specific details."
+        ]
+      },
       advertisement: {
-        count: 156,
+        count: 17,
         severity: 'High',
         examples: [
-          "Best restaurant in town! Call us at 555-0123 for reservations and special deals!",
-          "Visit our website at example.com for 50% off all meals this week!",
-          "Looking for catering? We provide the best service. Contact us today!"
+          "Best restaurant in town! Call us at 555-0123 for reservations!",
+          "Visit our website for 50% off all meals this week!",
+          "Looking for catering? Contact us today for the best service!"
         ]
       },
-      inappropriate_content: {
-        count: 23,
-        severity: 'Medium',
-        examples: [
-          "The staff here are absolutely terrible and should be fired immediately.",
-          "This place is disgusting and the owner is a complete idiot.",
-          "Worst service ever, these people don't deserve to have jobs."
-        ]
-      },
-      spam: {
-        count: 89,
-        severity: 'Medium',
-        examples: [
-          "Great food great food great food amazing service amazing service!",
-          "Best restaurant best restaurant best restaurant in the city!",
-          "Excellent excellent excellent food and service and atmosphere!"
-        ]
-      },
-      rant_without_visit: {
-        count: 67,
+      review_without_visit: {
+        count: 12,
         severity: 'Low',
         examples: [
-          "I heard from my friend that this place has terrible food and service.",
-          "My neighbor told me they got food poisoning here last month.",
-          "Someone on social media said this restaurant is overpriced and dirty."
+          "I heard from my friend that this place has terrible food.",
+          "My neighbor told me they got food poisoning here.",
+          "Someone on social media said this restaurant is overpriced."
         ]
       }
-    });
+    };
   
     // Mock analysis function
     const analyzeViolations = (text: string) => {
@@ -115,7 +143,8 @@ import {
       }
     };
   
-    const violationsData = generateViolationData();
+    // Use real data from API, fallback to mock data if API fails
+    const currentViolationsData = violationsData || fallbackViolationData;
   
     const getRiskColor = (level: string) => {
       switch (level) {
@@ -144,12 +173,45 @@ import {
       }
     };
   
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-2" />
+            <p>Loading violation data...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="flex items-center justify-center h-64">
+          <Alert className="max-w-md">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load violation data: {error}
+              <br />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2"
+                onClick={() => window.location.reload()}
+              >
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-8">
         {/* Page Header */}
         <div>
           <h1 className="text-3xl font-bold">Policy Violations</h1>
-          <p className="text-gray-600 mt-2">Monitor and analyze policy violations in reviews</p>
+          <p className="text-gray-600 mt-2">Real violation data from 5 model analysis</p>
         </div>
   
         {/* Violation Testing Section */}
@@ -257,22 +319,22 @@ import {
               <div>
                 <CardTitle>Violation Statistics</CardTitle>
               </div>
-              <Button variant="outline" size="sm">
-                <RefreshCw className="h-4 w-4 mr-2" />
+              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {Object.entries(violationsData).map(([violationType, data]) => (
-                <Card key={violationType}>
-                  <CardContent className="p-4 text-center">
-                    <div className="text-2xl font-bold">{data.count}</div>
-                    <div className="text-sm text-gray-600 mb-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {Object.entries(currentViolationsData).map(([violationType, data]) => (
+                <Card key={violationType} className="flex-1">
+                  <CardContent className="p-6 text-center">
+                    <div className="text-3xl font-bold mb-2">{data.count}</div>
+                    <div className="text-base text-gray-700 mb-3 font-medium">
                       {violationType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                     </div>
-                    <Badge variant={getSeverityVariant(data.severity)}>
+                    <Badge variant={getSeverityVariant(data.severity)} className="text-sm px-3 py-1">
                       {getRiskIcon(data.severity)} {data.severity}
                     </Badge>
                   </CardContent>
@@ -293,7 +355,7 @@ import {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.keys(violationsData).map(type => (
+                {Object.keys(currentViolationsData).map(type => (
                   <SelectItem key={type} value={type}>
                     {type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </SelectItem>
@@ -307,18 +369,26 @@ import {
                   <h4 className="font-semibold">
                     {selectedViolationType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </h4>
-                  <Badge variant={getSeverityVariant(violationsData[selectedViolationType].severity)}>
-                    Severity: {violationsData[selectedViolationType].severity}
+                  <Badge variant={getSeverityVariant(currentViolationsData[selectedViolationType].severity)}>
+                    Severity: {currentViolationsData[selectedViolationType].severity}
                   </Badge>
                 </div>
                 
                 <div className="space-y-2">
-                  {violationsData[selectedViolationType].examples.map((example, i) => (
-                    <div key={i} className="p-3 bg-gray-50 rounded-lg">
-                      <span className="text-sm font-medium">{i + 1}.</span>
-                      <span className="text-sm italic ml-2">"{example}"</span>
+                  {currentViolationsData[selectedViolationType]?.examples ? (
+                    currentViolationsData[selectedViolationType].examples!.map((example, i) => (
+                      <div key={i} className="p-3 bg-gray-50 rounded-lg">
+                        <span className="text-sm font-medium">{i + 1}.</span>
+                        <span className="text-sm italic ml-2">"{example}"</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 bg-gray-50 rounded-lg">
+                      <span className="text-sm text-gray-500 italic">
+                        No example violations available for this category
+                      </span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
             )}
