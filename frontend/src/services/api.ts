@@ -59,6 +59,39 @@ interface ModelDetails {
   }>;
 }
 
+interface ViolationStats {
+  [key: string]: {
+    count: number;
+    severity: 'High' | 'Medium' | 'Low';
+    examples?: string[];
+  };
+}
+
+interface ClassificationPerformance {
+  model: string;
+  family: string;
+  accuracy: number;
+  f1_score: number;
+  precision: number;
+  recall: number;
+}
+
+interface ConfidenceData {
+  category: string;
+  confidence: number;
+  count: number;
+}
+
+interface ModelInsights {
+  model: string;
+  family: string;
+  insights: {
+    strengths: string[];
+    weaknesses: string[];
+    recommendations: string[];
+  };
+}
+
 interface ClassificationData {
   category: string;
   count: number;
@@ -115,12 +148,16 @@ class ApiService {
   }
 
   // Classification API
-  async getClassificationMetrics(): Promise<any> {
-    return this.request('/classification/metrics');
+  async getClassificationPerformance(): Promise<ClassificationPerformance[]> {
+    return this.request<ClassificationPerformance[]>('/classification/performance');
   }
 
-  async getConfusionMatrix(): Promise<any> {
-    return this.request('/classification/confusion-matrix');
+  async getConfidenceData(): Promise<ConfidenceData[]> {
+    return this.request<ConfidenceData[]>('/classification/confidence-data');
+  }
+
+  async getModelInsights(): Promise<ModelInsights[]> {
+    return this.request<ModelInsights[]>('/classification/model-insights');
   }
 
   // Prediction API
@@ -136,8 +173,8 @@ class ApiService {
   }
 
   // Violations API
-  async getViolationStats(): Promise<any> {
-    return this.request('/violations/stats');
+  async getViolationStats(): Promise<ViolationStats> {
+    return this.request<ViolationStats>('/violations/statistics');
   }
 
   async getViolationExamples(category: string): Promise<any> {
@@ -155,6 +192,17 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
-export type { OverviewMetrics, ClassificationData, TimeSeriesData, RecentActivity, ModelSummary, ModelDetails };
+export type { 
+  OverviewMetrics, 
+  ClassificationData, 
+  TimeSeriesData, 
+  RecentActivity, 
+  ModelSummary, 
+  ModelDetails, 
+  ViolationStats,
+  ClassificationPerformance,
+  ConfidenceData,
+  ModelInsights
+};
 
 

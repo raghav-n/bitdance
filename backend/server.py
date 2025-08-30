@@ -12,10 +12,10 @@ import random
 
 app = Flask(__name__)
 
-# Configure CORS properly
+# Configure CORS properly - allow both common Vite ports
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+        "origins": ["http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
         "methods": ["GET", "POST", "PUT", "DELETE"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
