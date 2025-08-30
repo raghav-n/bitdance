@@ -2,12 +2,11 @@ import { Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import NavbarProvider from "./components/layout/NavbarProvider";
 
-// Import dashboard components
+// Import dashboard components (removed PredictionDashboard)
 import Layout from "./components/layout/Layout";
 import OverviewDashboard from "./components/dashboard/OverviewDashboard";
 import AnalyticsDashboard from "./components/dashboard/AnalyticsDashboard";
 import ClassificationDashboard from "./components/dashboard/ClassificationDashboard";
-import PredictionDashboard from "./components/dashboard/PredictionDashboard";
 import ViolationsDashboard from "./components/dashboard/ViolationsDashboard";
 
 function App() {
@@ -21,7 +20,7 @@ function App() {
         }
       >
         <Routes>
-          {/* Dashboard routes - all using consistent Layout */}
+          {/* Dashboard routes - removed prediction route */}
           <Route path="/" element={
             <Layout title="🕺BitDance">
               <OverviewDashboard />
@@ -37,12 +36,6 @@ function App() {
           <Route path="/classification" element={
             <Layout title="Classification">
               <ClassificationDashboard />
-            </Layout>
-          } />
-
-          <Route path="/prediction" element={
-            <Layout title="Prediction">
-              <PredictionDashboard />
             </Layout>
           } />
 
