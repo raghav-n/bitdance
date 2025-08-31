@@ -253,6 +253,7 @@ const ViolationsDashboard = () => {
         }
     };
 
+
     // Use real data from API, fallback to mock data if API fails
     const currentViolationsData = violationsData || fallbackViolationData;
 
@@ -483,13 +484,13 @@ const ViolationsDashboard = () => {
                                     {selectedViolationType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                 </h4>
                                 <Badge variant={getSeverityVariant(currentViolationsData[selectedViolationType].severity)}>
-                                    Severity: {currentViolationsData[selectedViolationType].severity}
+                                    Severity: {getRiskIcon(currentViolationsData[selectedViolationType].severity)} {currentViolationsData[selectedViolationType].severity}
                                 </Badge>
                             </div>
 
                             <div className="space-y-2">
-                                {currentViolationsData[selectedViolationType]?.examples ? (
-                                    currentViolationsData[selectedViolationType].examples!.map((example, i) => (
+                                {currentViolationsData[selectedViolationType.toLowerCase()]?.examples ? (
+                                    currentViolationsData[selectedViolationType.toLowerCase()].examples!.map((example, i) => (
                                         <div key={i} className="p-3 bg-gray-50 rounded-lg">
                                             <span className="text-sm font-medium">{i + 1}.</span>
                                             <span className="text-sm italic ml-2">"{example}"</span>
@@ -498,7 +499,7 @@ const ViolationsDashboard = () => {
                                 ) : (
                                     <div className="p-3 bg-gray-50 rounded-lg">
                                         <span className="text-sm text-gray-500 italic">
-                                            No example violations available for this category
+                                            No example violations available at the current moment. (Coming soon!)
                                         </span>
                                     </div>
                                 )}
@@ -527,36 +528,25 @@ const ViolationsDashboard = () => {
                                 <div>
                                     <h4 className="font-semibold mb-2 text-red-600">📺 Advertisement</h4>
                                     <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                                        <li>Reviews promoting business services, deals, or contact information</li>
-                                        <li>Contains promotional language or marketing content</li>
-                                        <li>Includes website links, phone numbers, or promotional codes</li>
+                                        <li>Reviews should not contain promotional content, advertisements, or links to external websites.</li>
+                                        <li>Example: Try our new burger deal at www.burgerpromo.com!</li>
                                     </ul>
                                 </div>
 
                                 <div>
                                     <h4 className="font-semibold mb-2 text-yellow-600">🗣️ Rant without Visit</h4>
                                     <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                                        <li>Negative reviews based on hearsay or second-hand information</li>
-                                        <li>Reviews stating "I heard..." or "My friend said..."</li>
-                                        <li>Opinions without actual experience at the establishment</li>
+                                        <li>Rants or complaints must come from actual visitors. Reviews based on hearsay or without evidence of a visit are violations.</li>
+                                        <li>Example: Never been here, but I heard it's terrible.</li>
+
                                     </ul>
                                 </div>
 
                                 <div>
-                                    <h4 className="font-semibold mb-2 text-orange-600">❌ Inappropriate Content</h4>
+                                    <h4 className="font-semibold mb-2 text-orange-600">❌ Irrelevant Content</h4>
                                     <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                                        <li>Reviews containing offensive, abusive, or discriminatory language</li>
-                                        <li>Personal attacks on staff or other customers</li>
-                                        <li>Content violating community standards</li>
-                                    </ul>
-                                </div>
-
-                                <div>
-                                    <h4 className="font-semibold mb-2 text-blue-600">📧 Spam</h4>
-                                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-600">
-                                        <li>Repetitive content or excessive use of same phrases</li>
-                                        <li>Reviews that appear to be automated or fake</li>
-                                        <li>Multiple similar reviews from same source</li>
+                                        <li>Reviews must be about the location itself, not about unrelated events, trips, or other topics.</li>
+                                        <li>Example: I had a great time in Paris last summer!</li>
                                     </ul>
                                 </div>
                             </div>
